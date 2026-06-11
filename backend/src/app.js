@@ -15,7 +15,7 @@ import configRoutes from "./routes/configRoutes.js";
 import contactoRoutes from "./routes/contactoRoutes.js";
 import notificacionRoutes from "./routes/notificacionRoutes.js";
 import { cargarConfiguracion } from "./middlewares/configMiddleware.js";
-
+import { startExpiredAppointmentsJob } from "./jobs/cleanExpiredAppointments.js";
 dotenv.config(); //Carga las variables de entorno desde el archivo .env
 
 const app = express(); //Crea una instancia de Express para configurar el servidor
@@ -31,6 +31,8 @@ const startApp = async () => {
     // Si la conexión es exitosa, se muestra un mensaje en la consola
     console.log(chalk.green("Base de datos conectada"));
 
+    // Iniciar job para limpiar citas vencidas
+    startExpiredAppointmentsJob();
     // Middlewares básicos
     app.use(
       cors({

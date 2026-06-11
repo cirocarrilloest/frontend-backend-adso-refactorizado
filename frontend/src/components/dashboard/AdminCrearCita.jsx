@@ -1,503 +1,583 @@
 // frontend/src/components/dashboard/AdminCrearCita.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Search,
+  User,
+  Scissors,
+  Calendar,
+  Clock,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+} from "lucide-react";
 import { getUsuarios } from "../../services/usuarioService";
 import { getServicios } from "../../services/servicioService";
 import { getBarberos } from "../../services/usuarioService";
 import {
   crearCitaAdmin,
-  verificarDisponibilidad,
+  getHorariosDisponibles,
 } from "../../services/citaService";
-import {
-  CheckCircle2,
-  XCircle,
-  Calendar,
-  Clock,
-  User,
-  Scissors,
-  AlertCircle,
-  X,
-} from "lucide-react";
 
-// ── Toast de éxito ────────────────────────────────────────────────────────────
-function SuccessToast({ message, onClose }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 4000);
-    return () => clearTimeout(t);
-  }, [onClose]);
-
+function Spinner() {
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: "24px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 9999,
-        animation: "toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          background: "#111827",
-          color: "#fff",
-          padding: "14px 20px",
-          borderRadius: "16px",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-          minWidth: "300px",
-          maxWidth: "420px",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        {/* Icono verde */}
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: "50%",
-            background: "#16a34a",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <CheckCircle2 size={20} color="#fff" />
-        </div>
-
-        {/* Texto */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p
-            style={{
-              margin: 0,
-              fontWeight: 700,
-              fontSize: "14px",
-              lineHeight: 1.2,
-            }}
-          >
-            ¡Cita creada exitosamente!
-          </p>
-          <p
-            style={{
-              margin: "3px 0 0",
-              fontSize: "12px",
-              opacity: 0.65,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {message}
-          </p>
-        </div>
-
-        {/* Barra de progreso */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            borderRadius: "0 0 16px 16px",
-            background: "rgba(255,255,255,0.1)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              background: "#16a34a",
-              animation: "progressBar 4s linear forwards",
-            }}
-          />
-        </div>
-
-        {/* Botón cerrar */}
-        <button
-          onClick={onClose}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            padding: 4,
-            borderRadius: 6,
-            color: "rgba(255,255,255,0.5)",
-            display: "flex",
-            alignItems: "center",
-            flexShrink: 0,
-          }}
-        >
-          <X size={14} />
-        </button>
-      </div>
-
-      {/* Keyframes inyectados una sola vez */}
-      <style>{`
-        @keyframes toastIn {
-          0%   { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(0.92); }
-          60%  { opacity: 1; transform: translateX(-50%) translateY(4px)   scale(1.02); }
-          100% { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1);    }
-        }
-        @keyframes progressBar {
-          from { width: 100%; }
-          to   { width: 0%;   }
-        }
-      `}</style>
+    <div className="flex items-center justify-center py-8">
+      <RefreshCw size={20} className="animate-spin text-amber-400" />
     </div>
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+function ErrorBanner({ msg }) {
+  if (!msg) return null;
+  return (
+    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
+      <AlertCircle size={16} /> {msg}
+    </div>
+  );
+}
+
 export const AdminCrearCita = ({ onCitaCreada }) => {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  // Datos del formulario
+  const [formData, setFormData] = useState({
+    cliente: null,
+    barbero: null,
+    servicio: null,
+    fecha: "",
+    hora: "",
+    notas: "",
+  });
+
+  // Listas para selects
   const [clientes, setClientes] = useState([]);
   const [barberos, setBarberos] = useState([]);
   const [servicios, setServicios] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [cargandoClientes, setCargandoClientes] = useState(true);
-  const [error, setError] = useState("");
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [disponible, setDisponible] = useState(null);
-  const [verificando, setVerificando] = useState(false);
+  const [horariosDisponibles, setHorariosDisponibles] = useState([]);
 
-  const [formData, setFormData] = useState({
-    cliente_id: "",
-    barbero_id: "",
-    servicio_id: "",
-    fecha: new Date().toISOString().split("T")[0],
-    hora: "09:00",
-    notas: "",
-  });
+  // Búsqueda de clientes
+  const [searchCliente, setSearchCliente] = useState("");
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [loadingClientes, setLoadingClientes] = useState(false);
 
   // Cargar datos iniciales
   useEffect(() => {
     const cargarDatos = async () => {
+      setLoading(true);
       try {
-        setCargandoClientes(true);
-
-        const [clientesRes, barberosRes, serviciosRes] = await Promise.all([
-          getUsuarios({ rol: "cliente" }),
+        const [barberosRes, serviciosRes] = await Promise.all([
           getBarberos(),
           getServicios(true),
         ]);
-
-        const clientesList = clientesRes.usuarios || [];
-        const barberosList = barberosRes.barberos || [];
-        const serviciosList = serviciosRes.servicios || [];
-
-        setClientes(clientesList);
-        setBarberos(barberosList);
-        setServicios(serviciosList);
-
-        if (clientesList.length > 0)
-          setFormData((p) => ({
-            ...p,
-            cliente_id: String(clientesList[0].id),
-          }));
-        if (barberosList.length > 0)
-          setFormData((p) => ({
-            ...p,
-            barbero_id: String(barberosList[0].id),
-          }));
-        if (serviciosList.length > 0)
-          setFormData((p) => ({
-            ...p,
-            servicio_id: String(serviciosList[0].id),
-          }));
+        setBarberos(barberosRes.barberos || []);
+        setServicios(serviciosRes.servicios || []);
       } catch (err) {
-        setError(
-          "Error al cargar los datos: " +
-            (err.response?.data?.message || err.message),
-        );
+        setError(err.response?.data?.message || "Error cargando datos");
       } finally {
-        setCargandoClientes(false);
+        setLoading(false);
       }
     };
     cargarDatos();
   }, []);
 
-  // Verificar disponibilidad
-  useEffect(() => {
-    const verificar = async () => {
-      if (!formData.barbero_id || !formData.fecha || !formData.hora) return;
-      setVerificando(true);
-      setDisponible(null);
-      try {
-        const result = await verificarDisponibilidad(
-          formData.barbero_id,
-          formData.fecha,
-          formData.hora,
-        );
-        setDisponible(result.disponible);
-      } catch {
-        setDisponible(false);
-      } finally {
-        setVerificando(false);
-      }
-    };
-    const t = setTimeout(verificar, 500);
-    return () => clearTimeout(t);
-  }, [formData.barbero_id, formData.fecha, formData.hora]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((p) => ({ ...p, [name]: value }));
-    setError("");
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.cliente_id || !formData.barbero_id || !formData.servicio_id) {
-      setError("Por favor selecciona cliente, barbero y servicio");
+  // Buscar clientes por nombre o email
+  const buscarClientes = useCallback(async (termino) => {
+    if (!termino || termino.length < 2) {
+      setClientes([]);
       return;
     }
-    if (!disponible) {
-      setError("El horario seleccionado no está disponible");
+    setLoadingClientes(true);
+    try {
+      const res = await getUsuarios({ rol: "cliente", search: termino });
+      setClientes(res.usuarios || []);
+      setShowClienteDropdown(true);
+    } catch (err) {
+      console.error("Error buscando clientes:", err);
+    } finally {
+      setLoadingClientes(false);
+    }
+  }, []);
+
+  // Debounce para búsqueda de clientes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchCliente) {
+        buscarClientes(searchCliente);
+      } else {
+        setClientes([]);
+        setShowClienteDropdown(false);
+      }
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchCliente, buscarClientes]);
+
+  // Cargar horarios cuando cambia barbero o fecha
+  useEffect(() => {
+    const cargarHorarios = async () => {
+      if (formData.barbero && formData.fecha) {
+        setLoading(true);
+        try {
+          const res = await getHorariosDisponibles(
+            formData.barbero.id,
+            formData.fecha,
+          );
+          setHorariosDisponibles(res.horarios_disponibles || []);
+        } catch (err) {
+          setHorariosDisponibles([]);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    cargarHorarios();
+  }, [formData.barbero, formData.fecha]);
+
+  const handleSubmit = async () => {
+    if (
+      !formData.cliente ||
+      !formData.barbero ||
+      !formData.servicio ||
+      !formData.fecha ||
+      !formData.hora
+    ) {
+      setError("Completa todos los campos requeridos");
       return;
     }
 
     setLoading(true);
-    setError("");
+    setError(null);
+    setSuccess(null);
 
     try {
-      const result = await crearCitaAdmin({
-        cliente_id: parseInt(formData.cliente_id),
-        barbero_id: parseInt(formData.barbero_id),
-        servicio_id: parseInt(formData.servicio_id),
+      await crearCitaAdmin({
+        cliente_id: formData.cliente.id,
+        barbero_id: formData.barbero.id,
+        servicio_id: formData.servicio.id,
         fecha: formData.fecha,
         hora: formData.hora,
-        notas: formData.notas || "",
+        notas: formData.notas,
       });
-
-      // Mostrar toast
-      setToastMessage(
-        result.message || "Cita creada exitosamente por el administrador",
-      );
-      setShowToast(true);
-
-      // Resetear solo notas y disponibilidad
-      setFormData((p) => ({ ...p, notas: "" }));
-      setDisponible(null);
-
-      if (onCitaCreada) onCitaCreada(result.cita);
+      setSuccess("Cita creada exitosamente");
+      setFormData({
+        cliente: null,
+        barbero: null,
+        servicio: null,
+        fecha: "",
+        hora: "",
+        notas: "",
+      });
+      setSearchCliente("");
+      setStep(1);
+      if (onCitaCreada) onCitaCreada();
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || "Error al crear la cita");
+      setError(err.response?.data?.message || "Error al crear cita");
     } finally {
       setLoading(false);
     }
   };
 
-  if (cargandoClientes) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 p-6">
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">
-            Cargando formulario...
-          </p>
-        </div>
-      </div>
-    );
+  const seleccionarCliente = (cliente) => {
+    setFormData({ ...formData, cliente });
+    setSearchCliente(cliente.nombre);
+    setShowClienteDropdown(false);
+    setStep(2);
+  };
+
+  const steps = [
+    { num: 1, label: "Cliente", icon: User },
+    { num: 2, label: "Servicio", icon: Scissors },
+    { num: 3, label: "Barbero", icon: User },
+    { num: 4, label: "Fecha/Hora", icon: Calendar },
+    { num: 5, label: "Confirmar", icon: CheckCircle },
+  ];
+
+  if (loading && !formData.cliente) {
+    return <Spinner />;
   }
 
   return (
-    <>
-      {/* Toast de éxito */}
-      {showToast && (
-        <SuccessToast
-          message={toastMessage}
-          onClose={() => setShowToast(false)}
-        />
-      )}
+    <div className="max-w-2xl mx-auto">
+      {/* Progress Steps */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          {steps.map((s, idx) => (
+            <React.Fragment key={s.num}>
+              <div className="flex flex-col items-center">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                    step >= s.num
+                      ? "bg-amber-400 text-gray-900"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-500"
+                  }`}
+                >
+                  {step > s.num ? (
+                    <CheckCircle size={18} />
+                  ) : (
+                    <s.icon size={18} />
+                  )}
+                </div>
+                <span className="text-xs mt-1 text-gray-500 hidden sm:block">
+                  {s.label}
+                </span>
+              </div>
+              {idx < steps.length - 1 && (
+                <div
+                  className={`flex-1 h-0.5 mx-2 ${
+                    step > s.num
+                      ? "bg-amber-400"
+                      : "bg-gray-200 dark:bg-gray-700"
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 p-6">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-          Crear Cita (Administrador)
-        </h3>
-
-        {error && (
-          <div className="mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-            <AlertCircle size={16} />
-            <span>{error}</span>
+        {error && <ErrorBanner msg={error} />}
+        {success && (
+          <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg text-sm mb-4">
+            <CheckCircle size={16} /> {success}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Cliente */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Cliente *
-            </label>
+        {/* STEP 1: Buscar Cliente */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Buscar cliente
+            </h3>
+            <p className="text-sm text-gray-500">
+              Busca por nombre o correo electrónico
+            </p>
+
             <div className="relative">
-              <User
+              <Search
+                size={18}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
               />
-              <select
-                name="cliente_id"
-                value={formData.cliente_id}
-                onChange={handleChange}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                required
-              >
-                <option value="">Seleccionar cliente</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} - {c.email}
-                  </option>
+              <input
+                type="text"
+                value={searchCliente}
+                onChange={(e) => setSearchCliente(e.target.value)}
+                onFocus={() => searchCliente && setShowClienteDropdown(true)}
+                placeholder="Escribe nombre o email..."
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+
+            {loadingClientes && (
+              <div className="flex justify-center py-4">
+                <RefreshCw size={20} className="animate-spin text-amber-400" />
+              </div>
+            )}
+
+            {showClienteDropdown && clientes.length > 0 && (
+              <div className="border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden">
+                {clientes.map((cliente) => (
+                  <button
+                    key={cliente.id}
+                    onClick={() => seleccionarCliente(cliente)}
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex items-center gap-3 border-b border-gray-100 dark:border-white/5 last:border-0"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                      <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                        {cliente.nombre?.charAt(0)?.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {cliente.nombre}
+                      </p>
+                      <p className="text-xs text-gray-400">{cliente.email}</p>
+                    </div>
+                    {cliente.telefono && (
+                      <p className="text-xs text-gray-400">
+                        {cliente.telefono}
+                      </p>
+                    )}
+                  </button>
                 ))}
-              </select>
+              </div>
+            )}
+
+            {showClienteDropdown &&
+              searchCliente &&
+              clientes.length === 0 &&
+              !loadingClientes && (
+                <div className="text-center py-8 text-gray-400">
+                  No se encontraron clientes con "{searchCliente}"
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* STEP 2: Seleccionar Servicio */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Seleccionar servicio
+              </h3>
+              <button
+                onClick={() => setStep(1)}
+                className="text-sm text-amber-500 hover:text-amber-600"
+              >
+                ← Cambiar cliente
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {servicios.map((servicio) => (
+                <button
+                  key={servicio.id}
+                  onClick={() => {
+                    setFormData({ ...formData, servicio });
+                    setStep(3);
+                  }}
+                  className={`w-full text-left p-4 rounded-xl border transition-all ${
+                    formData.servicio?.id === servicio.id
+                      ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20"
+                      : "border-gray-200 dark:border-white/10 hover:border-amber-300"
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {servicio.nombre}
+                      </p>
+                      {servicio.descripcion && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {servicio.descripcion}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-amber-600 dark:text-amber-400">
+                        ${servicio.precio}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {servicio.duracion} min
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Barbero */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Barbero *
-            </label>
-            <div className="relative">
-              <User
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
-              />
-              <select
-                name="barbero_id"
-                value={formData.barbero_id}
-                onChange={handleChange}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                required
+        {/* STEP 3: Seleccionar Barbero */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Seleccionar barbero
+              </h3>
+              <button
+                onClick={() => setStep(2)}
+                className="text-sm text-amber-500 hover:text-amber-600"
               >
-                <option value="">Seleccionar barbero</option>
-                {barberos.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.nombre}
-                  </option>
-                ))}
-              </select>
+                ← Cambiar servicio
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {barberos.map((barbero) => (
+                <button
+                  key={barbero.id}
+                  onClick={() => {
+                    setFormData({ ...formData, barbero });
+                    setStep(4);
+                  }}
+                  className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-white/10 hover:border-amber-300 transition-all flex items-center gap-3"
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                      {barbero.nombre?.charAt(0)?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {barbero.nombre}
+                    </p>
+                    {barbero.email && (
+                      <p className="text-xs text-gray-400">{barbero.email}</p>
+                    )}
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Servicio */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Servicio *
-            </label>
-            <div className="relative">
-              <Scissors
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
-              />
-              <select
-                name="servicio_id"
-                value={formData.servicio_id}
-                onChange={handleChange}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                required
+        {/* STEP 4: Fecha y Hora */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Fecha y hora
+              </h3>
+              <button
+                onClick={() => setStep(3)}
+                className="text-sm text-amber-500 hover:text-amber-600"
               >
-                <option value="">Seleccionar servicio</option>
-                {servicios.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre} - ${s.precio} - {s.duracion} min
-                  </option>
-                ))}
-              </select>
+                ← Cambiar barbero
+              </button>
             </div>
-          </div>
 
-          {/* Fecha */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Fecha *
-            </label>
-            <div className="relative">
-              <Calendar
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
-              />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Fecha
+              </label>
               <input
                 type="date"
-                name="fecha"
-                value={formData.fecha}
-                onChange={handleChange}
                 min={new Date().toISOString().split("T")[0]}
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                required
+                value={formData.fecha}
+                onChange={(e) =>
+                  setFormData({ ...formData, fecha: e.target.value, hora: "" })
+                }
+                className="w-full rounded-lg border border-gray-200 dark:border-white/10 px-4 py-2 text-sm dark:bg-gray-700"
               />
             </div>
-          </div>
 
-          {/* Hora */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Hora *
-            </label>
-            <div className="relative">
-              <Clock
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={16}
+            {formData.fecha && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Hora disponible
+                </label>
+                {loading ? (
+                  <div className="flex justify-center py-4">
+                    <RefreshCw
+                      size={20}
+                      className="animate-spin text-amber-400"
+                    />
+                  </div>
+                ) : horariosDisponibles.length === 0 ? (
+                  <p className="text-sm text-amber-600 dark:text-amber-400 py-2">
+                    No hay horarios disponibles para esta fecha
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {horariosDisponibles.map((hora) => (
+                      <button
+                        key={hora}
+                        onClick={() => setFormData({ ...formData, hora })}
+                        className={`py-2 rounded-lg text-sm font-medium border transition-all ${
+                          formData.hora === hora
+                            ? "bg-amber-400 border-amber-400 text-gray-900"
+                            : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-300"
+                        }`}
+                      >
+                        {hora}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Notas (opcional)
+              </label>
+              <textarea
+                value={formData.notas}
+                onChange={(e) =>
+                  setFormData({ ...formData, notas: e.target.value })
+                }
+                rows={2}
+                className="w-full rounded-lg border border-gray-200 dark:border-white/10 px-4 py-2 text-sm dark:bg-gray-700"
+                placeholder="Instrucciones especiales..."
               />
-              <input
-                type="time"
-                name="hora"
-                value={formData.hora}
-                onChange={handleChange}
-                step="1800"
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                required
-              />
             </div>
+
+            <button
+              onClick={() => setStep(5)}
+              disabled={!formData.fecha || !formData.hora}
+              className="w-full bg-amber-400 text-gray-900 py-3 rounded-lg font-semibold hover:bg-amber-300 transition-colors disabled:opacity-50"
+            >
+              Continuar
+            </button>
           </div>
+        )}
 
-          {/* Indicador de disponibilidad */}
-          {verificando && (
-            <div className="text-sm text-gray-400 flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500" />
-              Verificando disponibilidad...
+        {/* STEP 5: Confirmar */}
+        {step === 5 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Confirmar cita
+              </h3>
+              <button
+                onClick={() => setStep(4)}
+                className="text-sm text-amber-500 hover:text-amber-600"
+              >
+                ← Cambiar fecha
+              </button>
             </div>
-          )}
 
-          {disponible === true && !verificando && (
-            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg">
-              <CheckCircle2 size={16} /> Horario disponible
+            <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500">Cliente</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.cliente?.nombre}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500">Servicio</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.servicio?.nombre} · ${formData.servicio?.precio}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500">Barbero</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.barbero?.nombre}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-500">Fecha y hora</span>
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {formData.fecha} · {formData.hora}
+                </span>
+              </div>
+              {formData.notas && (
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Notas</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {formData.notas}
+                  </span>
+                </div>
+              )}
             </div>
-          )}
 
-          {disponible === false && !verificando && (
-            <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
-              <XCircle size={16} /> Horario no disponible
-            </div>
-          )}
-
-          {/* Notas */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Notas (opcional)
-            </label>
-            <textarea
-              name="notas"
-              value={formData.notas}
-              onChange={handleChange}
-              rows={3}
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="Instrucciones especiales, observaciones..."
-            />
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full bg-green-500 text-white py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
+            >
+              {loading ? "Creando cita..." : "Confirmar y crear cita"}
+            </button>
           </div>
-
-          <button
-            type="submit"
-            disabled={
-              loading || (!verificando && disponible !== true) || verificando
-            }
-            className="w-full bg-amber-500 hover:bg-amber-600 text-gray-900 font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Creando cita..." : "Crear Cita"}
-          </button>
-        </form>
+        )}
       </div>
-    </>
+
+      {/* Resumen del cliente seleccionado */}
+      {formData.cliente && step > 1 && (
+        <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl">
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Cliente: <strong>{formData.cliente.nombre}</strong> (
+            {formData.cliente.email})
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
+
+export default AdminCrearCita;
