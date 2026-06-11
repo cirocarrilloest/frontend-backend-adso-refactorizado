@@ -1,0 +1,163 @@
+# ========================
+#   DEPENDENCIES
+# ========================
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+
+# ========================
+#   BUILD / DIST
+# ========================
+dist/
+dist-ssr/
+build/
+out/
+.output/
+frontend/dist/
+frontend/build/
+backend/dist/
+backend/build/
+
+
+# ========================
+#   ENVIRONMENT & SECRETS
+# ========================
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+frontend/.env*
+backend/.env*
+
+
+# ========================
+#   LOGS
+# ========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+
+# ========================
+#   CACHE
+# ========================
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.turbo/
+.nx/cache
+*.tsbuildinfo
+
+
+# ========================
+#   VITE / REACT
+# ========================
+*.local
+frontend/.vite/
+
+
+# ========================
+#   TESTING
+# ========================
+coverage/
+*.lcov
+.nyc_output/
+frontend/coverage/
+backend/coverage/
+
+
+# ========================
+#   EDITOR & OS
+# ========================
+
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# IntelliJ / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+
+
+# ========================
+#   BACKEND (Node/Express)
+# ========================
+backend/node_modules/
+backend/uploads/
+backend/tmp/
+backend/*.sqlite
+backend/*.db
+*.pem
+*.key
+*.cert
+*.crt
+
+
+# ========================
+#   DATABASE
+# ========================
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+dump.sql
+*.sql.gz
+
+
+# ========================
+#   DOCKER
+# ========================
+.dockerignore
+docker-compose.override.yml
+
+
+# ========================
+#   MISC
+# ========================
+*.zip
+*.tar.gz
+*.rar
+tmp/
+temp/
+.temp/
+.tmp/
+
+listaCodigo.js
+frontend/src/assets/reporte_ingresos_mes_2026-04-13_a_2026-05-13.csv
+frontend/src/assets/reporte_ingresos_mes_2026-04-13_a_2026-05-13.xlsx

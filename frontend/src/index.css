@@ -1,0 +1,27 @@
+/* src/index.css*/
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap");
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+body {
+  font-family: "Bebas Neue", "Rye", cursive;
+  background: linear-gradient(to right, black, blue);
+  background-size: cover;
+  min-height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0);
+  z-index: -1;
+}
+
+/* index.css */
+a {
+  text-decoration: none !important;
+}

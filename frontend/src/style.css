@@ -1,0 +1,17 @@
+/* src/style.css*/
+@import "tailwindcss";
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --font-rye: "Rye", serif;
+}
+
+.contenido {
+  background-color: #ffffff;
+  border-radius: 40px;
+  position: relative;
+  overflow: hidden;
+  width: 50vh;
+  min-height: 480px;
+  max-width: 100%;
+}
