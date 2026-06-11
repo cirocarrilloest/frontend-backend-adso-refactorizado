@@ -23,6 +23,9 @@ import {
   CalendarPlus,
   DollarSign,
   Download,
+  CheckCircle,
+  XCircle,
+  Clock as ClockIcon,
 } from "lucide-react";
 import DashboardShell from "./DashboardShell";
 import {
@@ -60,48 +63,100 @@ import VistaCitasAdmin from "./VistaCitasAdmin";
 import VistaTodasLasCitas from "../admin/VistaTodasLasCitas";
 import { AdminCrearCita } from "./AdminCrearCita";
 
-/**
- * Componente Spinner - Indicador de carga
- */
+// ============================================
+// UTILIDADES
+// ============================================
+
+const formatearMonedaCOP = (valor) => {
+  if (valor === undefined || valor === null) return "$0";
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(valor);
+};
+
+// ============================================
+// COMPONENTES UI REUTILIZABLES
+// ============================================
+
 function Spinner() {
   return (
     <div className="flex items-center justify-center py-10">
-      <RefreshCw size={20} className="animate-spin text-amber-400" />
+      <RefreshCw size={24} className="animate-spin text-amber-500" />
     </div>
   );
 }
 
-/**
- * Componente ErrorBanner - Muestra mensajes de error
- */
 function ErrorBanner({ msg }) {
   if (!msg) return null;
   return (
-    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
+    <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 px-4 py-3 rounded-xl text-sm border border-rose-100 dark:border-rose-900/30">
       <AlertCircle size={16} /> {msg}
     </div>
   );
 }
 
-/**
- * Componente Modal - Ventana modal reutilizable
- */
+function SuccessBanner({ msg }) {
+  if (!msg) return null;
+  return (
+    <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 px-4 py-3 rounded-xl text-sm border border-emerald-100 dark:border-emerald-900/30">
+      <CheckCircle size={16} /> {msg}
+    </div>
+  );
+}
+
 function Modal({ isOpen, onClose, children, titulo }) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/10">
-          <h3 className="font-bold text-gray-900 dark:text-white">{titulo}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 dark:border-white/10">
+        <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-white/10">
+          <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+            {titulo}
+          </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X size={20} />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-5">{children}</div>
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, trend, color = "amber" }) {
+  const colorClasses = {
+    amber:
+      "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
+    blue: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+    green:
+      "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400",
+    purple:
+      "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
+    rose: "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400",
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          {label}
+        </span>
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorClasses[color]}`}
+        >
+          <Icon size={18} />
+        </div>
+      </div>
+      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+        {value ?? "—"}
+      </p>
+      {trend && <p className="text-xs text-emerald-500 mt-1">{trend}</p>}
     </div>
   );
 }
@@ -110,9 +165,6 @@ function Modal({ isOpen, onClose, children, titulo }) {
 // VISTA INICIO
 // ============================================
 
-/**
- * VistaInicio - Panel principal con estadísticas del negocio
- */
 function VistaInicio() {
   const [stats, setStats] = useState(null);
   const [serviciosTop, setServiciosTop] = useState([]);
@@ -148,72 +200,60 @@ function VistaInicio() {
       label: "Citas hoy",
       value: stats?.citas_hoy,
       icon: Calendar,
-      color: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+      color: "blue",
     },
     {
       label: "Pendientes",
       value: stats?.citas_pendientes,
-      icon: Clock,
-      color:
-        "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
+      icon: ClockIcon,
+      color: "amber",
     },
     {
-      label: "Ingresos mes",
-      value: `$${Number(stats?.ingresos_mes || 0).toLocaleString()}`,
+      label: "Ingresos del mes",
+      value: formatearMonedaCOP(stats?.ingresos_mes || 0),
       icon: TrendingUp,
-      color:
-        "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+      color: "green",
     },
     {
       label: "Clientes",
       value: stats?.clientes_totales,
       icon: Users,
-      color:
-        "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400",
-      sub: `${stats?.barberos_activos} barberos activos`,
+      color: "purple",
+      trend: `${stats?.barberos_activos} barberos activos`,
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {cards.map((c) => (
-          <div
-            key={c.label}
-            className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-white/5"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {c.label}
-              </span>
-              <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center ${c.color}`}
-              >
-                <c.icon size={18} />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white">
-              {c.value ?? "—"}
-            </p>
-            {c.sub && <p className="text-xs text-gray-400 mt-1">{c.sub}</p>}
-          </div>
+          <StatCard key={c.label} {...c} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Servicios más solicitados
-            </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Servicios más solicitados */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-gray-800/50">
+            <div className="flex items-center gap-2">
+              <Scissors size={16} className="text-amber-500" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Servicios más solicitados
+              </h2>
+            </div>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-white/5">
             {serviciosTop.length === 0 && (
-              <p className="text-sm text-gray-400 px-5 py-4">Sin datos aún</p>
+              <p className="text-sm text-gray-400 px-5 py-8 text-center">
+                Sin datos aún
+              </p>
             )}
             {serviciosTop.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-3 px-5 py-3">
-                <span className="text-xs font-bold text-gray-400 w-4">
+              <div
+                key={s.id}
+                className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >
+                <span className="text-xs font-bold text-gray-400 w-5">
                   {i + 1}
                 </span>
                 <div className="flex-1">
@@ -221,7 +261,7 @@ function VistaInicio() {
                     {s.nombre}
                   </p>
                   <p className="text-xs text-gray-400">
-                    ${s.precio} · {s.duracion} min
+                    {formatearMonedaCOP(s.precio)} · {s.duracion} min
                   </p>
                 </div>
                 <span className="text-sm font-semibold text-amber-500">
@@ -232,28 +272,37 @@ function VistaInicio() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Clientes frecuentes
-            </h2>
+        {/* Clientes frecuentes */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-gray-800/50">
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-amber-500" />
+              <h2 className="font-semibold text-gray-900 dark:text-white">
+                Clientes frecuentes
+              </h2>
+            </div>
           </div>
           <div className="divide-y divide-gray-100 dark:divide-white/5">
             {clientesTop.length === 0 && (
-              <p className="text-sm text-gray-400 px-5 py-4">Sin datos aún</p>
+              <p className="text-sm text-gray-400 px-5 py-8 text-center">
+                Sin datos aún
+              </p>
             )}
             {clientesTop.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 px-5 py-3">
+              <div
+                key={c.id}
+                className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >
                 <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-xs font-bold text-amber-700 dark:text-amber-400">
-                  {c.nombre?.charAt(0)}
+                  {c.nombre?.charAt(0)?.toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                     {c.nombre}
                   </p>
                   <p className="text-xs text-gray-400">
-                    {c.total_citas} visitas · $
-                    {Number(c.total_gastado || 0).toLocaleString()}
+                    {c.total_citas} visitas ·{" "}
+                    {formatearMonedaCOP(c.total_gastado || 0)}
                   </p>
                 </div>
               </div>
@@ -266,12 +315,9 @@ function VistaInicio() {
 }
 
 // ============================================
-// VISTA USUARIOS
+// VISTA USUARIOS (COMPLETA)
 // ============================================
 
-/**
- * VistaUsuarios - Gestión completa de usuarios del sistema
- */
 function VistaUsuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -287,7 +333,6 @@ function VistaUsuarios() {
     userId: null,
     userName: "",
   });
-
   const [formData, setFormData] = useState({
     nombre: "",
     email: "",
@@ -327,7 +372,6 @@ function VistaUsuarios() {
   const handleBuscar = (e) => {
     if (e.key === "Enter") cargar();
   };
-
   const handleCambiarRol = async (id, nuevoRol) => {
     try {
       await asignarRol(id, nuevoRol);
@@ -336,7 +380,6 @@ function VistaUsuarios() {
       alert(e.response?.data?.message || e.message);
     }
   };
-
   const handleEliminar = async (id) => {
     if (!confirm("¿Eliminar este usuario?")) return;
     try {
@@ -346,7 +389,6 @@ function VistaUsuarios() {
       alert(e.response?.data?.message || e.message);
     }
   };
-
   const handleCrearUsuario = async () => {
     if (!formData.nombre || !formData.email || !formData.pass) {
       alert("Nombre, email y contraseña son obligatorios");
@@ -370,7 +412,6 @@ function VistaUsuarios() {
       setCargando(false);
     }
   };
-
   const handleEditarUsuario = async () => {
     setCargando(true);
     try {
@@ -383,7 +424,6 @@ function VistaUsuarios() {
       setCargando(false);
     }
   };
-
   const handleCambiarPassword = async () => {
     if (!nuevaPassword || nuevaPassword.length < 6) {
       alert("La contraseña debe tener al menos 6 caracteres");
@@ -401,7 +441,6 @@ function VistaUsuarios() {
       setCargando(false);
     }
   };
-
   const abrirEditar = (usuario) => {
     setUsuarioSeleccionado(usuario);
     setEditFormData({
@@ -412,13 +451,11 @@ function VistaUsuarios() {
     });
     setModalEditarOpen(true);
   };
-
   const abrirPassword = (usuario) => {
     setUsuarioSeleccionado(usuario);
     setNuevaPassword("");
     setModalPasswordOpen(true);
   };
-
   const rolColor = {
     admin:
       "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
@@ -426,6 +463,9 @@ function VistaUsuarios() {
       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     cliente: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   };
+
+  if (loading) return <Spinner />;
+  if (error) return <ErrorBanner msg={error} />;
 
   return (
     <div className="space-y-4">
@@ -436,12 +476,12 @@ function VistaUsuarios() {
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={handleBuscar}
-          className="flex-1 border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-4 py-2 text-sm"
+          className="flex-1 border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
         <select
           value={filtroRol}
           onChange={(e) => setFiltroRol(e.target.value)}
-          className="border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm"
+          className="border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
         >
           <option value="">Todos los roles</option>
           <option value="admin">Admin</option>
@@ -450,93 +490,88 @@ function VistaUsuarios() {
         </select>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors"
+          className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors"
         >
           <UserPlus size={16} /> Nuevo Usuario
         </button>
       </div>
 
-      {loading && <Spinner />}
-      {error && <ErrorBanner msg={error} />}
-
-      {!loading && !error && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
-          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              Usuarios
-            </h2>
-            <span className="text-xs text-gray-400">
-              {usuarios.length} registros
-            </span>
-          </div>
-          <div className="divide-y divide-gray-100 dark:divide-white/5">
-            {usuarios.length === 0 && (
-              <p className="text-sm text-gray-400 px-5 py-4">Sin resultados</p>
-            )}
-            {usuarios.map((u) => (
-              <div key={u.id} className="flex items-center gap-3 px-5 py-3">
-                <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300">
-                  {u.nombre?.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {u.nombre}
-                  </p>
-                  <p className="text-xs text-gray-400">{u.email}</p>
-                  {u.telefono && (
-                    <p className="text-xs text-gray-500">{u.telefono}</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={u.rol}
-                    onChange={(e) => handleCambiarRol(u.id, e.target.value)}
-                    className={`text-xs px-2 py-1 rounded-full font-medium border-0 ${rolColor[u.rol]} cursor-pointer`}
-                  >
-                    <option value="admin">admin</option>
-                    <option value="barbero">barbero</option>
-                    <option value="cliente">cliente</option>
-                  </select>
-                  <button
-                    onClick={() =>
-                      setCitasModal({
-                        open: true,
-                        userId: u.id,
-                        userName: u.nombre,
-                      })
-                    }
-                    className="text-green-400 hover:text-green-600 transition-colors"
-                    title="Ver historial de citas"
-                  >
-                    <Calendar size={14} />
-                  </button>
-                  <button
-                    onClick={() => abrirEditar(u)}
-                    className="text-blue-400 hover:text-blue-600 transition-colors"
-                    title="Editar datos"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button
-                    onClick={() => abrirPassword(u)}
-                    className="text-amber-400 hover:text-amber-600 transition-colors"
-                    title="Cambiar contraseña"
-                  >
-                    <Key size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleEliminar(u.id)}
-                    className="text-red-400 hover:text-red-600 transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between">
+          <h2 className="font-semibold text-gray-900 dark:text-white">
+            Usuarios
+          </h2>
+          <span className="text-xs text-gray-400">
+            {usuarios.length} registros
+          </span>
         </div>
-      )}
+        <div className="divide-y divide-gray-100 dark:divide-white/5">
+          {usuarios.length === 0 && (
+            <p className="text-sm text-gray-400 px-5 py-4">Sin resultados</p>
+          )}
+          {usuarios.map((u) => (
+            <div key={u.id} className="flex items-center gap-3 px-5 py-3">
+              <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300">
+                {u.nombre?.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  {u.nombre}
+                </p>
+                <p className="text-xs text-gray-400">{u.email}</p>
+                {u.telefono && (
+                  <p className="text-xs text-gray-500">{u.telefono}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={u.rol}
+                  onChange={(e) => handleCambiarRol(u.id, e.target.value)}
+                  className={`text-xs px-2 py-1 rounded-full font-medium border-0 ${rolColor[u.rol]} cursor-pointer focus:ring-2 focus:ring-amber-400`}
+                >
+                  <option value="admin">admin</option>
+                  <option value="barbero">barbero</option>
+                  <option value="cliente">cliente</option>
+                </select>
+                <button
+                  onClick={() =>
+                    setCitasModal({
+                      open: true,
+                      userId: u.id,
+                      userName: u.nombre,
+                    })
+                  }
+                  className="text-emerald-400 hover:text-emerald-600 transition-colors"
+                  title="Ver historial de citas"
+                >
+                  <Calendar size={14} />
+                </button>
+                <button
+                  onClick={() => abrirEditar(u)}
+                  className="text-blue-400 hover:text-blue-600 transition-colors"
+                  title="Editar datos"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  onClick={() => abrirPassword(u)}
+                  className="text-amber-400 hover:text-amber-600 transition-colors"
+                  title="Cambiar contraseña"
+                >
+                  <Key size={14} />
+                </button>
+                <button
+                  onClick={() => handleEliminar(u.id)}
+                  className="text-rose-400 hover:text-rose-600 transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <Modal
         isOpen={modalOpen}
@@ -551,7 +586,7 @@ function VistaUsuarios() {
             onChange={(e) =>
               setFormData({ ...formData, nombre: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <input
             type="email"
@@ -560,7 +595,7 @@ function VistaUsuarios() {
             onChange={(e) =>
               setFormData({ ...formData, email: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <input
             type="text"
@@ -569,19 +604,19 @@ function VistaUsuarios() {
             onChange={(e) =>
               setFormData({ ...formData, telefono: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <input
             type="password"
             placeholder="Contraseña *"
             value={formData.pass}
             onChange={(e) => setFormData({ ...formData, pass: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <select
             value={formData.rol}
             onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="cliente">Cliente</option>
             <option value="barbero">Barbero</option>
@@ -590,7 +625,7 @@ function VistaUsuarios() {
           <button
             onClick={handleCrearUsuario}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             {cargando ? "Creando..." : "Crear Usuario"}
           </button>
@@ -610,7 +645,7 @@ function VistaUsuarios() {
             onChange={(e) =>
               setEditFormData({ ...editFormData, nombre: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <input
             type="email"
@@ -619,7 +654,7 @@ function VistaUsuarios() {
             onChange={(e) =>
               setEditFormData({ ...editFormData, email: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <input
             type="text"
@@ -628,14 +663,14 @@ function VistaUsuarios() {
             onChange={(e) =>
               setEditFormData({ ...editFormData, telefono: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <select
             value={editFormData.rol}
             onChange={(e) =>
               setEditFormData({ ...editFormData, rol: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="cliente">Cliente</option>
             <option value="barbero">Barbero</option>
@@ -644,7 +679,7 @@ function VistaUsuarios() {
           <button
             onClick={handleEditarUsuario}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             {cargando ? "Guardando..." : "Guardar Cambios"}
           </button>
@@ -665,12 +700,12 @@ function VistaUsuarios() {
             placeholder="Nueva contraseña (mínimo 6 caracteres)"
             value={nuevaPassword}
             onChange={(e) => setNuevaPassword(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <button
             onClick={handleCambiarPassword}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             {cargando ? "Actualizando..." : "Actualizar Contraseña"}
           </button>
@@ -690,12 +725,9 @@ function VistaUsuarios() {
 }
 
 // ============================================
-// VISTA SERVICIOS
+// VISTA SERVICIOS (COMPLETA)
 // ============================================
 
-/**
- * VistaServicios - Gestión de servicios ofrecidos
- */
 function VistaServicios() {
   const [servicios, setServicios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -730,7 +762,6 @@ function VistaServicios() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     cargar();
   }, []);
@@ -743,7 +774,6 @@ function VistaServicios() {
       alert(e.response?.data?.message || e.message);
     }
   };
-
   const handleEliminar = async (id) => {
     if (!confirm("¿Eliminar este servicio? Se eliminarán las citas asociadas."))
       return;
@@ -754,7 +784,6 @@ function VistaServicios() {
       alert(e.response?.data?.message || e.message);
     }
   };
-
   const handleCrearServicio = async () => {
     if (!formData.nombre || formData.duracion <= 0 || formData.precio <= 0) {
       alert("Nombre, duración y precio son obligatorios y deben ser válidos");
@@ -778,7 +807,6 @@ function VistaServicios() {
       setCargando(false);
     }
   };
-
   const handleEditarServicio = async () => {
     setCargando(true);
     try {
@@ -791,7 +819,6 @@ function VistaServicios() {
       setCargando(false);
     }
   };
-
   const abrirEditar = (servicio) => {
     setServicioSeleccionado(servicio);
     setEditFormData({
@@ -811,12 +838,11 @@ function VistaServicios() {
     <div className="space-y-4">
       <button
         onClick={() => setModalOpen(true)}
-        className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors"
+        className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors"
       >
         <Plus size={16} /> Nuevo Servicio
       </button>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
           <h2 className="font-semibold text-gray-900 dark:text-white">
             Servicios
@@ -830,7 +856,7 @@ function VistaServicios() {
                   {s.nombre}
                 </p>
                 <p className="text-xs text-gray-400">
-                  ${s.precio} · {s.duracion} min
+                  {formatearMonedaCOP(s.precio)} · {s.duracion} min
                   {s.descripcion && (
                     <span className="ml-2">- {s.descripcion}</span>
                   )}
@@ -846,7 +872,7 @@ function VistaServicios() {
                 </button>
                 <button
                   onClick={() => handleToggle(s.id)}
-                  className={`${s.activo ? "text-green-500" : "text-gray-400"} hover:opacity-70 transition`}
+                  className={`${s.activo ? "text-emerald-500" : "text-gray-400"} hover:opacity-70 transition`}
                   title={s.activo ? "Desactivar" : "Activar"}
                 >
                   {s.activo ? (
@@ -857,7 +883,7 @@ function VistaServicios() {
                 </button>
                 <button
                   onClick={() => handleEliminar(s.id)}
-                  className="text-red-400 hover:text-red-600 transition-colors"
+                  className="text-rose-400 hover:text-rose-600 transition-colors"
                   title="Eliminar"
                 >
                   <Trash2 size={14} />
@@ -881,7 +907,7 @@ function VistaServicios() {
             onChange={(e) =>
               setFormData({ ...formData, nombre: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <textarea
             placeholder="Descripción (opcional)"
@@ -890,7 +916,7 @@ function VistaServicios() {
               setFormData({ ...formData, descripcion: e.target.value })
             }
             rows="2"
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <div className="grid grid-cols-2 gap-3">
             <input
@@ -900,7 +926,7 @@ function VistaServicios() {
               onChange={(e) =>
                 setFormData({ ...formData, duracion: parseInt(e.target.value) })
               }
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <input
               type="number"
@@ -909,7 +935,7 @@ function VistaServicios() {
               onChange={(e) =>
                 setFormData({ ...formData, precio: parseFloat(e.target.value) })
               }
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
           <label className="flex items-center gap-2">
@@ -925,7 +951,7 @@ function VistaServicios() {
           <button
             onClick={handleCrearServicio}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             {cargando ? "Creando..." : "Crear Servicio"}
           </button>
@@ -945,7 +971,7 @@ function VistaServicios() {
             onChange={(e) =>
               setEditFormData({ ...editFormData, nombre: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <textarea
             placeholder="Descripción"
@@ -954,7 +980,7 @@ function VistaServicios() {
               setEditFormData({ ...editFormData, descripcion: e.target.value })
             }
             rows="2"
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <div className="grid grid-cols-2 gap-3">
             <input
@@ -967,7 +993,7 @@ function VistaServicios() {
                   duracion: parseInt(e.target.value),
                 })
               }
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <input
               type="number"
@@ -979,7 +1005,7 @@ function VistaServicios() {
                   precio: parseFloat(e.target.value),
                 })
               }
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
           <label className="flex items-center gap-2">
@@ -995,7 +1021,7 @@ function VistaServicios() {
           <button
             onClick={handleEditarServicio}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50"
           >
             {cargando ? "Guardando..." : "Guardar Cambios"}
           </button>
@@ -1006,12 +1032,9 @@ function VistaServicios() {
 }
 
 // ============================================
-// VISTA HORARIOS
+// VISTA HORARIOS (COMPLETA)
 // ============================================
 
-/**
- * VistaHorarios - Gestión de horarios laborales de los barberos
- */
 function VistaHorarios() {
   const [barberos, setBarberos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1025,7 +1048,6 @@ function VistaHorarios() {
     hora_fin: "18:00",
   });
   const [cargando, setCargando] = useState(false);
-
   const diasSemana = [
     "lunes",
     "martes",
@@ -1041,35 +1063,27 @@ function VistaHorarios() {
     try {
       const res = await getUsuarios({ rol: "barbero" });
       setBarberos(res.usuarios || []);
-      if (res.usuarios?.length > 0) {
-        setBarberoSeleccionado(res.usuarios[0]);
-      }
+      if (res.usuarios?.length > 0) setBarberoSeleccionado(res.usuarios[0]);
     } catch (e) {
       setError(e.response?.data?.message || e.message);
     } finally {
       setLoading(false);
     }
   };
-
   const cargarHorarios = async (barberoId) => {
     if (!barberoId) return;
     try {
       const res = await getHorarioBarbero(barberoId);
       setHorarios(res.horarios || []);
     } catch (e) {
-      console.error("Error cargando horarios:", e);
       setHorarios([]);
     }
   };
-
   useEffect(() => {
     cargarBarberos();
   }, []);
-
   useEffect(() => {
-    if (barberoSeleccionado) {
-      cargarHorarios(barberoSeleccionado.id);
-    }
+    if (barberoSeleccionado) cargarHorarios(barberoSeleccionado.id);
   }, [barberoSeleccionado]);
 
   const handleGuardarHorario = async () => {
@@ -1098,7 +1112,6 @@ function VistaHorarios() {
       setCargando(false);
     }
   };
-
   const handleEliminarHorario = async (dia) => {
     if (!barberoSeleccionado) return;
     if (!confirm(`¿Eliminar horario del ${dia}?`)) return;
@@ -1109,7 +1122,6 @@ function VistaHorarios() {
       alert(e.response?.data?.message || e.message);
     }
   };
-
   const getHorarioPorDia = (dia) => horarios.find((h) => h.dia_semana === dia);
 
   if (loading) return <Spinner />;
@@ -1126,7 +1138,7 @@ function VistaHorarios() {
             );
             setBarberoSeleccionado(barbero);
           }}
-          className="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+          className="border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
         >
           <option value="">Seleccionar barbero</option>
           {barberos.map((b) => (
@@ -1138,20 +1150,19 @@ function VistaHorarios() {
         <button
           onClick={() => setModalOpen(true)}
           disabled={!barberoSeleccionado}
-          className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+          className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-50 hover:bg-amber-600 transition-colors"
         >
           <Plus size={16} /> Agregar horario
         </button>
       </div>
-
       {barberoSeleccionado && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border">
-          <div className="px-5 py-4 border-b">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
             <h2 className="font-semibold">
               Horarios de {barberoSeleccionado.nombre}
             </h2>
           </div>
-          <div className="divide-y">
+          <div className="divide-y divide-gray-100 dark:divide-white/5">
             {diasSemana.map((dia) => {
               const horario = getHorarioPorDia(dia);
               return (
@@ -1168,7 +1179,7 @@ function VistaHorarios() {
                       </span>
                       <button
                         onClick={() => handleEliminarHorario(dia)}
-                        className="text-red-400 hover:text-red-600"
+                        className="text-rose-400 hover:text-rose-600"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1184,7 +1195,6 @@ function VistaHorarios() {
           </div>
         </div>
       )}
-
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1196,7 +1206,7 @@ function VistaHorarios() {
             onChange={(e) =>
               setFormData({ ...formData, dia_semana: e.target.value })
             }
-            className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+            className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             {diasSemana.map((dia) => (
               <option key={dia} value={dia}>
@@ -1211,7 +1221,7 @@ function VistaHorarios() {
               onChange={(e) =>
                 setFormData({ ...formData, hora_inicio: e.target.value })
               }
-              className="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
             <input
               type="time"
@@ -1219,13 +1229,13 @@ function VistaHorarios() {
               onChange={(e) =>
                 setFormData({ ...formData, hora_fin: e.target.value })
               }
-              className="border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
           <button
             onClick={handleGuardarHorario}
             disabled={cargando}
-            className="w-full bg-amber-500 text-white py-2 rounded-lg font-semibold hover:bg-amber-600 disabled:opacity-50"
+            className="w-full bg-amber-500 text-white py-2 rounded-xl font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors"
           >
             {cargando ? "Guardando..." : "Guardar horario"}
           </button>
@@ -1236,12 +1246,9 @@ function VistaHorarios() {
 }
 
 // ============================================
-// VISTA MENSAJES
+// VISTA MENSAJES (COMPLETA)
 // ============================================
 
-/**
- * VistaMensajes - Gestión de mensajes de contacto
- */
 function VistaMensajes() {
   const [mensajes, setMensajes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1259,11 +1266,9 @@ function VistaMensajes() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     cargarMensajes();
   }, [soloNoLeidos]);
-
   const handleMarcarLeido = async (id) => {
     try {
       await marcarMensajeLeido(id);
@@ -1279,19 +1284,18 @@ function VistaMensajes() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between">
-        <label className="flex items-center gap-2 text-sm text-black dark:text-white">
+        <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={soloNoLeidos}
             onChange={(e) => setSoloNoLeidos(e.target.checked)}
-          />
+          />{" "}
           Solo no leídos
         </label>
         <span className="text-xs text-gray-400">
           {mensajes.length} mensajes
         </span>
       </div>
-
       <div className="space-y-3">
         {mensajes.length === 0 && (
           <p className="text-center text-gray-400 py-10">No hay mensajes</p>
@@ -1299,7 +1303,7 @@ function VistaMensajes() {
         {mensajes.map((m) => (
           <div
             key={m.id}
-            className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border ${!m.leido ? "border-amber-300 dark:border-amber-500" : "border-gray-100 dark:border-white/5"}`}
+            className={`bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border ${!m.leido ? "border-amber-300 dark:border-amber-500" : "border-gray-100 dark:border-white/5"}`}
           >
             <div className="flex justify-between items-start">
               <div>
@@ -1329,12 +1333,9 @@ function VistaMensajes() {
 }
 
 // ============================================
-// VISTA REPORTES (TASA CANCELACIÓN Y DISTRIBUCIÓN)
+// VISTA REPORTES (COMPLETA)
 // ============================================
 
-/**
- * VistaReportes - Reportes avanzados del negocio
- */
 function VistaReportes() {
   const [distribucion, setDistribucion] = useState([]);
   const [tasaCancelacion, setTasaCancelacion] = useState([]);
@@ -1364,11 +1365,9 @@ function VistaReportes() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     cargar();
   }, []);
-
   const aplicarFiltro = () => cargar();
 
   if (loading) return <Spinner />;
@@ -1376,7 +1375,7 @@ function VistaReportes() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-white/5">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-white/5">
         <div className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="flex-1">
             <label className="text-xs text-gray-500">Fecha inicio</label>
@@ -1384,7 +1383,7 @@ function VistaReportes() {
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
           <div className="flex-1">
@@ -1393,28 +1392,25 @@ function VistaReportes() {
               type="date"
               value={fechaFin}
               onChange={(e) => setFechaFin(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
           <button
             onClick={aplicarFiltro}
-            className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-600"
+            className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors"
           >
             Aplicar filtro
           </button>
         </div>
       </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
-          <h2 className="font-semibold text-gray-900 dark:text-white">
-            Distribución de citas por hora
-          </h2>
+          <h2 className="font-semibold">Distribución de citas por hora</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
+            <thead className="bg-gray-50 dark:bg-gray-800/80">
+              <tr className="border-b border-gray-100 dark:border-white/5">
                 <th className="px-4 py-2 text-left">Hora</th>
                 <th className="px-4 py-2 text-left">Total citas</th>
                 <th className="px-4 py-2 text-left">Completadas</th>
@@ -1438,25 +1434,24 @@ function VistaReportes() {
                     {String(h.hora).padStart(2, "0")}:00
                   </td>
                   <td className="px-4 py-2">{h.total_citas}</td>
-                  <td className="px-4 py-2 text-green-600">{h.completadas}</td>
-                  <td className="px-4 py-2 text-red-600">{h.canceladas}</td>
+                  <td className="px-4 py-2 text-emerald-600">
+                    {h.completadas}
+                  </td>
+                  <td className="px-4 py-2 text-rose-600">{h.canceladas}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
-          <h2 className="font-semibold text-gray-900 dark:text-white">
-            Tasa de cancelación por barbero
-          </h2>
+          <h2 className="font-semibold">Tasa de cancelación por barbero</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
+            <thead className="bg-gray-50 dark:bg-gray-800/80">
+              <tr className="border-b border-gray-100 dark:border-white/5">
                 <th className="px-4 py-2 text-left">Barbero</th>
                 <th className="px-4 py-2 text-left">Total citas</th>
                 <th className="px-4 py-2 text-left">Canceladas</th>
@@ -1478,10 +1473,10 @@ function VistaReportes() {
                 <tr key={b.id}>
                   <td className="px-4 py-2 font-medium">{b.nombre}</td>
                   <td className="px-4 py-2">{b.total_citas}</td>
-                  <td className="px-4 py-2 text-red-600">{b.canceladas}</td>
+                  <td className="px-4 py-2 text-rose-600">{b.canceladas}</td>
                   <td className="px-4 py-2">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold ${b.tasa_cancelacion > 30 ? "bg-red-100 text-red-700" : b.tasa_cancelacion > 15 ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${b.tasa_cancelacion > 30 ? "bg-rose-100 text-rose-700" : b.tasa_cancelacion > 15 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
                     >
                       {b.tasa_cancelacion || 0}%
                     </span>
@@ -1497,12 +1492,9 @@ function VistaReportes() {
 }
 
 // ============================================
-// VISTA REPORTE DE INGRESOS (NUEVA)
+// VISTA REPORTE DE INGRESOS (COMPLETA)
 // ============================================
 
-/**
- * VistaReporteIngresos - Reporte detallado de ingresos del negocio
- */
 function VistaReporteIngresos() {
   const [reporte, setReporte] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1526,10 +1518,15 @@ function VistaReporteIngresos() {
     setError(null);
     try {
       const data = await getReporteIngresos(periodo, fechaInicio, fechaFin);
-      if (data.ok) {
+      if (data && data.reporte) {
         setReporte(data);
       } else {
-        setError(data.message || "Error al cargar reporte");
+        setReporte({
+          reporte: Array.isArray(data) ? data : [],
+          periodo,
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+        });
       }
     } catch (e) {
       setError(e.response?.data?.message || e.message);
@@ -1539,73 +1536,81 @@ function VistaReporteIngresos() {
   };
 
   useEffect(() => {
-    if (fechaInicio && fechaFin) {
-      cargarReporte();
-    }
+    if (fechaInicio && fechaFin) cargarReporte();
   }, [periodo, fechaInicio, fechaFin]);
 
+  const calcularTotales = () => {
+    if (!reporte?.reporte?.length)
+      return { ingresos: 0, citas: 0, completadas: 0, canceladas: 0 };
+    let ingresos = 0,
+      citas = 0,
+      completadas = 0,
+      canceladas = 0;
+    for (const item of reporte.reporte) {
+      ingresos += Number(item.ingreso_total) || 0;
+      citas += Number(item.total_citas) || 0;
+      completadas += Number(item.citas_completadas) || 0;
+      canceladas += Number(item.citas_canceladas) || 0;
+    }
+    return { ingresos, citas, completadas, canceladas };
+  };
+
+  const totales = calcularTotales();
+  const ticketPromedio =
+    totales.completadas > 0 ? totales.ingresos / totales.completadas : 0;
+  const tasaExito =
+    totales.citas > 0 ? (totales.completadas / totales.citas) * 100 : 0;
+
   const exportarCSV = () => {
-    if (!reporte?.reporte) return;
+    if (!reporte?.reporte?.length) {
+      alert("No hay datos para exportar");
+      return;
+    }
     setExportando(true);
     try {
-      const rows = [
-        [
-          "Período",
-          "Total Citas",
-          "Ingreso Total",
-          "Ticket Promedio",
-          "Completadas",
-          "Canceladas",
-        ],
+      const escapeCSV = (v) => {
+        if (v === undefined || v === null) return '""';
+        const s = String(v);
+        if (s.includes(",") || s.includes('"') || s.includes("\n"))
+          return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const headers = [
+        "Período",
+        "Total Citas",
+        "Completadas",
+        "Canceladas",
+        "Ticket Promedio",
+        "Ingreso Total",
       ];
-      reporte.reporte.forEach((item) => {
-        rows.push([
-          item.periodo,
-          item.total_citas,
-          `$${Number(item.ingreso_total || 0).toLocaleString()}`,
-          `$${(Number(item.ticket_promedio) || 0).toFixed(2)}`,
-          item.citas_completadas || 0,
-          item.citas_canceladas || 0,
-        ]);
-      });
-      const totalIngresos = reporte.reporte.reduce(
-        (sum, item) => sum + (Number(item.ingreso_total) || 0),
-        0,
-      );
-      const totalCitas = reporte.reporte.reduce(
-        (sum, item) => sum + (item.total_citas || 0),
-        0,
-      );
-      const totalCompletadas = reporte.reporte.reduce(
-        (sum, item) => sum + (item.citas_completadas || 0),
-        0,
-      );
-      const totalCanceladas = reporte.reporte.reduce(
-        (sum, item) => sum + (item.citas_canceladas || 0),
-        0,
-      );
-      rows.push([], ["RESUMEN", "", "", "", "", ""]);
-      rows.push([
-        "Total General",
-        totalCitas,
-        `$${totalIngresos.toLocaleString()}`,
-        `$${(totalIngresos / (totalCompletadas || 1)).toFixed(2)}`,
-        totalCompletadas,
-        totalCanceladas,
+      const rows = reporte.reporte.map((item) => [
+        escapeCSV(item.periodo),
+        Number(item.total_citas) || 0,
+        Number(item.citas_completadas) || 0,
+        Number(item.citas_canceladas) || 0,
+        formatearMonedaCOP(Number(item.ticket_promedio) || 0),
+        formatearMonedaCOP(Number(item.ingreso_total) || 0),
       ]);
-      const csvContent = rows.map((row) => row.join(",")).join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      rows.push([
+        "TOTAL",
+        totales.citas,
+        totales.completadas,
+        totales.canceladas,
+        formatearMonedaCOP(ticketPromedio),
+        formatearMonedaCOP(totales.ingresos),
+      ]);
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) => row.join(",")),
+      ].join("\n");
+      const blob = new Blob(["\uFEFF" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
       const link = document.createElement("a");
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `reporte_ingresos_${periodo}_${fechaInicio}_a_${fechaFin}.csv`,
-      );
-      document.body.appendChild(link);
+      link.href = URL.createObjectURL(blob);
+      link.download = `reporte_ingresos_${periodo}_${fechaInicio}_a_${fechaFin}.csv`;
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(link.href);
     } catch (e) {
       alert("Error al exportar: " + e.message);
     } finally {
@@ -1613,245 +1618,191 @@ function VistaReporteIngresos() {
     }
   };
 
-  const totales = reporte?.reporte?.reduce(
-    (sum, item) => ({
-      ingresos: sum.ingresos + (Number(item.ingreso_total) || 0),
-      citas: sum.citas + (item.total_citas || 0),
-      completadas: sum.completadas + (item.citas_completadas || 0),
-      canceladas: sum.canceladas + (item.citas_canceladas || 0),
-    }),
-    { ingresos: 0, citas: 0, completadas: 0, canceladas: 0 },
-  ) || { ingresos: 0, citas: 0, completadas: 0, canceladas: 0 };
-
-  const ticketPromedio =
-    totales.completadas > 0 ? totales.ingresos / totales.completadas : 0;
-
   if (loading) return <Spinner />;
   if (error) return <ErrorBanner msg={error} />;
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border">
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
-          <div className="w-full sm:w-40">
-            <label className="text-xs text-gray-500">Período</label>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Período
+            </label>
             <select
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="w-full rounded-xl border border-gray-200 dark:border-white/10 px-4 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
             >
               <option value="dia">Día</option>
               <option value="mes">Mes</option>
               <option value="año">Año</option>
             </select>
           </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-500">Fecha inicio</label>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Fecha inicio
+            </label>
             <input
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="w-full rounded-xl border border-gray-200 dark:border-white/10 px-4 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-500">Fecha fin</label>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Fecha fin
+            </label>
             <input
               type="date"
               value={fechaFin}
               onChange={(e) => setFechaFin(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700"
+              className="w-full rounded-xl border border-gray-200 dark:border-white/10 px-4 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
           </div>
-          <button
-            onClick={exportarCSV}
-            disabled={exportando || !reporte?.reporte?.length}
-            className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-600 disabled:opacity-50"
-          >
-            <Download size={16} />{" "}
-            {exportando ? "Exportando..." : "Exportar CSV"}
-          </button>
+          <div className="flex items-end">
+            <button
+              onClick={exportarCSV}
+              disabled={exportando || !reporte?.reporte?.length}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors disabled:opacity-50"
+            >
+              <Download size={16} />{" "}
+              {exportando ? "Exportando..." : "Exportar CSV"}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Tarjetas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Ingresos Totales</span>
-            <div className="w-9 h-9 rounded-lg bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center">
-              <DollarSign size={18} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-            ${totales.ingresos.toLocaleString()}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            {totales.citas} citas en total
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Citas Completadas</span>
-            <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center">
-              <Calendar size={18} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-            {totales.completadas}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            {totales.canceladas} canceladas
-          </p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Ticket Promedio</span>
-            <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 flex items-center justify-center">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-            ${ticketPromedio.toFixed(2)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">por cita completada</p>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Tasa de Éxito</span>
-            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 flex items-center justify-center">
-              <BarChart2 size={18} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">
-            {totales.citas > 0
-              ? ((totales.completadas / totales.citas) * 100).toFixed(1)
-              : 0}
-            %
-          </p>
-          <p className="text-xs text-gray-400 mt-1">de citas completadas</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard
+          label="Ingresos Totales"
+          value={formatearMonedaCOP(totales.ingresos)}
+          icon={DollarSign}
+          color="green"
+        />
+        <StatCard
+          label="Citas Completadas"
+          value={totales.completadas}
+          icon={CheckCircle}
+          color="green"
+        />
+        <StatCard
+          label="Citas Canceladas"
+          value={totales.canceladas}
+          icon={XCircle}
+          color="rose"
+        />
+        <StatCard
+          label="Tasa de Éxito"
+          value={`${tasaExito.toFixed(1)}%`}
+          icon={TrendingUp}
+          color="amber"
+        />
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border">
-        <div className="px-5 py-4 border-b flex justify-between items-center">
-          <h2 className="font-semibold">
-            Ingresos por{" "}
-            {periodo === "dia" ? "Día" : periodo === "mes" ? "Mes" : "Año"}
-          </h2>
-          <span className="text-xs text-gray-400">
-            {reporte?.reporte?.length || 0} períodos
-          </span>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-gray-800/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart2 size={16} className="text-amber-500" />
+              <h2 className="font-semibold">
+                Ingresos por{" "}
+                {periodo === "dia" ? "Día" : periodo === "mes" ? "Mes" : "Año"}
+              </h2>
+            </div>
+            <span className="text-xs text-gray-400">
+              {reporte?.reporte?.length || 0} períodos
+            </span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
-                <th className="px-4 py-2 text-left">
+            <thead className="bg-gray-50 dark:bg-gray-800/80">
+              <tr className="border-b border-gray-100 dark:border-white/5">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   {periodo === "dia"
                     ? "Fecha"
                     : periodo === "mes"
                       ? "Mes"
                       : "Año"}
                 </th>
-                <th className="px-4 py-2 text-center">Total Citas</th>
-                <th className="px-4 py-2 text-center">Completadas</th>
-                <th className="px-4 py-2 text-center">Canceladas</th>
-                <th className="px-4 py-2 text-center">Ticket Promedio</th>
-                <th className="px-4 py-2 text-right">Ingresos</th>
+                <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Total
+                </th>
+                <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Completadas
+                </th>
+                <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Canceladas
+                </th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Ticket Promedio
+                </th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Ingresos
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {(!reporte?.reporte || reporte.reporte.length === 0) && (
-                <tr>
-                  <td
-                    colSpan="6"
-                    className="px-4 py-4 text-center text-gray-400"
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+              {reporte?.reporte?.map((item, idx) => {
+                const completadas = Number(item.citas_completadas) || 0;
+                const ticketItem =
+                  completadas > 0
+                    ? (Number(item.ingreso_total) || 0) / completadas
+                    : 0;
+                return (
+                  <tr
+                    key={idx}
+                    className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
-                    No hay datos
-                  </td>
-                </tr>
-              )}
-              {reporte?.reporte?.map((item, idx) => (
-                <tr
-                  key={idx}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700/30"
-                >
-                  <td className="px-4 py-2 font-medium">{item.periodo}</td>
-                  <td className="px-4 py-2 text-center">
-                    <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-medium">
-                      {item.total_citas}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-center text-green-600">
-                    {item.citas_completadas || 0}
-                  </td>
-                  <td className="px-4 py-2 text-center text-red-600">
-                    {item.citas_canceladas || 0}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    ${(Number(item.ticket_promedio) || 0).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-2 text-right font-semibold text-green-600">
-                    ${(Number(item.ingreso_total) || 0).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-5 py-3 font-medium text-gray-900 dark:text-white">
+                      {item.periodo}
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        {Number(item.total_citas) || 0}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-center text-emerald-600 dark:text-emerald-400 font-medium">
+                      {completadas}
+                    </td>
+                    <td className="px-5 py-3 text-center text-rose-600 dark:text-rose-400 font-medium">
+                      {Number(item.citas_canceladas) || 0}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-600 dark:text-gray-300">
+                      {formatearMonedaCOP(ticketItem)}
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                      {formatearMonedaCOP(item.ingreso_total)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
-            <tfoot className="bg-gray-50 dark:bg-gray-700/50 font-semibold">
+            <tfoot className="bg-gray-50 dark:bg-gray-800/80 font-semibold border-t border-gray-200 dark:border-white/10">
               <tr>
-                <td className="px-4 py-2">Total</td>
-                <td className="px-4 py-2 text-center">{totales.citas}</td>
-                <td className="px-4 py-2 text-center text-green-600">
+                <td className="px-5 py-3 text-gray-900 dark:text-white">
+                  Total
+                </td>
+                <td className="px-5 py-3 text-center text-gray-900 dark:text-white">
+                  {totales.citas}
+                </td>
+                <td className="px-5 py-3 text-center text-emerald-600 dark:text-emerald-400">
                   {totales.completadas}
                 </td>
-                <td className="px-4 py-2 text-center text-red-600">
+                <td className="px-5 py-3 text-center text-rose-600 dark:text-rose-400">
                   {totales.canceladas}
                 </td>
-                <td className="px-4 py-2 text-center">
-                  ${ticketPromedio.toFixed(2)}
+                <td className="px-5 py-3 text-right text-gray-900 dark:text-white">
+                  {formatearMonedaCOP(ticketPromedio)}
                 </td>
-                <td className="px-4 py-2 text-right font-bold text-green-600">
-                  ${totales.ingresos.toLocaleString()}
+                <td className="px-5 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatearMonedaCOP(totales.ingresos)}
                 </td>
               </tr>
             </tfoot>
           </table>
-        </div>
-      </div>
-
-      {/* Información */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
-        <div className="flex items-start gap-3">
-          <AlertCircle size={18} className="text-blue-500 mt-0.5" />
-          <div className="text-sm text-blue-700 dark:text-blue-300">
-            <p className="font-medium mb-1">Información del reporte:</p>
-            <ul className="list-disc list-inside text-xs space-y-1">
-              <li>
-                Período seleccionado:{" "}
-                <strong>
-                  {periodo === "dia"
-                    ? "Diario"
-                    : periodo === "mes"
-                      ? "Mensual"
-                      : "Anual"}
-                </strong>
-              </li>
-              <li>
-                Rango de fechas: <strong>{fechaInicio}</strong> al{" "}
-                <strong>{fechaFin}</strong>
-              </li>
-              <li>
-                Solo se incluyen citas en estado <strong>completada</strong> o{" "}
-                <strong>confirmada</strong>
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
   validarFechaNoPasada,
   validarHoraLaboral,
 } from "../middlewares/dateValidationMiddleware.js";
-
+import { cleanExpiredAppointments } from "../jobs/cleanExpiredAppointments.js";
 const router = express.Router();
 
 // Middleware de autenticación para todas las rutas
@@ -135,5 +135,12 @@ router.delete("/:id", citaController.cancelarCita);
 
 /** Obtener cita por ID (SIEMPRE LA ÚLTIMA) */
 router.get("/:id", citaController.getCitaById);
-
+router.post("/limpiar-vencidas", authMiddleware, esAdmin, async (req, res) => {
+  try {
+    const resultado = await cleanExpiredAppointments();
+    res.json({ ok: true, ...resultado });
+  } catch (error) {
+    res.status(500).json({ ok: false, message: error.message });
+  }
+});
 export default router;

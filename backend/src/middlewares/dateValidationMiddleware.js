@@ -17,41 +17,45 @@ import {
  */
 const getDiasLaborales = (req) => {
   const config = req.config || {};
-  return (
-    config.dias_laborales?.valor || [
-      "lunes",
-      "martes",
-      "miercoles",
-      "jueves",
-      "viernes",
-      "sabado",
-    ]
-  );
+  const dias = config.dias_laborales?.valor;
+  if (Array.isArray(dias) && dias.length > 0) {
+    return dias;
+  }
+  // Valor por defecto
+  return ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
 };
 
 /**
  * Valida que el día sea laborable según configuración del sistema.
  */
 export const validarDiaLaborable = (req, res, next) => {
-  const { fecha } = req.body;
+  const { fecha, hora } = req.body;
   if (!fecha) return next();
-
   const diaSemana = getDiaSemana(fecha);
-  if (!getDiasLaborales(req).includes(diaSemana)) {
+  const diasLaborales = getDiasLaborales(req);
+  if (!diasLaborales.includes(diaSemana)) {
     return res.status(400).json({
       ok: false,
-      message: `El negocio no labora los ${diaSemana}. Días laborales: ${getDiasLaborales(req).join(", ")}`,
+      message: `El negocio no labora los ${diaSemana}. Días laborales: ${diasLaborales.join(", ")}`,
     });
+  }
+  // Validar horario laboral global (si existe en configuración)
+  if (hora) {
+    const apertura = req.config?.horario_apertura?.valor || "09:00";
+    const cierre = req.config?.horario_cierre?.valor || "20:00";
+    const horaStr = String(hora).slice(0, 5);
+    if (horaStr < apertura || horaStr >= cierre) {
+      return res.status(400).json({
+        ok: false,
+        message: `Horario no disponible. El negocio está abierto de ${apertura} a ${cierre}`,
+      });
+    }
   }
   next();
 };
 
 /**
  * Valida que la fecha (y opcionalmente la hora) no sean pasadas.
- *
- * @param {string} fieldName - Nombre del campo de fecha en req.body o req.query
- * @param {boolean} isQuery - Si true, lee de req.query; si false, de req.body
- * @param {string} horaField - Nombre del campo de hora
  */
 export const validarFechaNoPasada = (
   fieldName = "fecha",

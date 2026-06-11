@@ -226,20 +226,43 @@ export const getResumenCitasByBarbero = async (
 
 export const getReporteIngresos = async (periodo, fecha_inicio, fecha_fin) => {
   const pool = getPool();
-  const groupBy =
-    periodo === "dia"
-      ? "c.fecha"
-      : periodo === "mes"
-        ? "DATE_FORMAT(c.fecha, '%Y-%m')"
-        : "YEAR(c.fecha)";
+
+  let groupBy;
+  let selectPeriodo;
+
+  switch (periodo) {
+    case "dia":
+      groupBy = "c.fecha";
+      selectPeriodo = "c.fecha";
+      break;
+    case "mes":
+      groupBy = "DATE_FORMAT(c.fecha, '%Y-%m')";
+      selectPeriodo = "DATE_FORMAT(c.fecha, '%Y-%m')";
+      break;
+    case "año":
+      groupBy = "YEAR(c.fecha)";
+      selectPeriodo = "YEAR(c.fecha)";
+      break;
+    default:
+      groupBy = "DATE_FORMAT(c.fecha, '%Y-%m')";
+      selectPeriodo = "DATE_FORMAT(c.fecha, '%Y-%m')";
+  }
+
   const [rows] = await pool.execute(
-    `SELECT ${groupBy} as periodo, COUNT(c.id) as total_citas, SUM(s.precio) as ingreso_total,
-            AVG(s.precio) as ticket_promedio,
-            SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as citas_canceladas,
-            SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as citas_completadas
-     FROM citas c JOIN servicios s ON c.servicio_id = s.id
-     WHERE c.fecha BETWEEN ? AND ? AND c.estado IN ('completada', 'confirmada')
-     GROUP BY periodo ORDER BY periodo DESC`,
+    `SELECT 
+      ${selectPeriodo} as periodo,
+      COUNT(c.id) as total_citas,
+      SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as citas_completadas,
+      SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as citas_canceladas,
+      SUM(CASE WHEN c.estado = 'confirmada' THEN 1 ELSE 0 END) as citas_confirmadas,
+      SUM(CASE WHEN c.estado = 'pendiente' THEN 1 ELSE 0 END) as citas_pendientes,
+      COALESCE(SUM(CASE WHEN c.estado = 'completada' THEN s.precio ELSE 0 END), 0) as ingreso_total,
+      COALESCE(AVG(CASE WHEN c.estado = 'completada' THEN s.precio ELSE NULL END), 0) as ticket_promedio
+    FROM citas c
+    INNER JOIN servicios s ON c.servicio_id = s.id
+    WHERE c.fecha BETWEEN ? AND ?
+    GROUP BY ${groupBy}
+    ORDER BY periodo DESC`,
     [fecha_inicio, fecha_fin],
   );
   return rows;
@@ -252,8 +275,12 @@ export const getServiciosMasSolicitados = async (
 ) => {
   const pool = getPool();
   const limiteNum = Math.min(Math.max(parseInt(limite) || 5, 1), 50);
-  let query = `SELECT s.id, s.nombre, s.precio, s.duracion, COUNT(c.id) as total_citas, COALESCE(SUM(s.precio), 0) as ingreso_generado
-               FROM servicios s JOIN citas c ON s.id = c.servicio_id WHERE c.estado NOT IN ('cancelada')`;
+  let query = `SELECT s.id, s.nombre, s.precio, s.duracion, 
+                      COUNT(c.id) as total_citas, 
+                      COALESCE(SUM(s.precio), 0) as ingreso_generado
+               FROM servicios s 
+               INNER JOIN citas c ON s.id = c.servicio_id 
+               WHERE c.estado = 'completada'`; // 👈 CAMBIO: solo completadas
   const params = [];
   if (fecha_inicio && fecha_fin) {
     query += " AND c.fecha BETWEEN ? AND ?";
@@ -290,10 +317,17 @@ export const getDistribucionCitasPorHora = async (
   fecha_fin = null,
 ) => {
   const pool = getPool();
-  let query = `SELECT HOUR(c.hora) as hora, COUNT(*) as total_citas,
-                      SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as completadas,
-                      SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas
-               FROM citas c WHERE 1=1`;
+  let query = `
+    SELECT 
+      HOUR(c.hora) as hora,
+      COUNT(*) as total_citas,
+      SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as completadas,
+      SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas,
+      SUM(CASE WHEN c.estado = 'confirmada' THEN 1 ELSE 0 END) as confirmadas,
+      SUM(CASE WHEN c.estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes
+    FROM citas c
+    WHERE 1=1
+  `;
   const params = [];
   if (fecha_inicio && fecha_fin) {
     query += " AND c.fecha BETWEEN ? AND ?";
@@ -301,37 +335,85 @@ export const getDistribucionCitasPorHora = async (
   }
   query += " GROUP BY HOUR(c.hora) ORDER BY hora ASC";
   const [rows] = await pool.execute(query, params);
-  return rows;
+  // Completar horas faltantes (de 8 a 20)
+  const horasCompletas = {};
+  for (let i = 8; i <= 20; i++) {
+    horasCompletas[i] = {
+      hora: i,
+      total_citas: 0,
+      completadas: 0,
+      canceladas: 0,
+      confirmadas: 0,
+      pendientes: 0,
+    };
+  }
+  rows.forEach((row) => {
+    horasCompletas[row.hora] = row;
+  });
+  return Object.values(horasCompletas);
 };
 
 export const getDashboardStats = async () => {
   const pool = getPool();
-  const queries = {
-    citas_hoy:
-      "SELECT COUNT(*) as total FROM citas WHERE fecha = CURDATE() AND estado != 'cancelada'",
-    citas_pendientes:
-      "SELECT COUNT(*) as total FROM citas WHERE estado = 'pendiente' AND fecha >= CURDATE()",
-    ingresos_mes:
-      "SELECT COALESCE(SUM(s.precio), 0) as total FROM citas c JOIN servicios s ON c.servicio_id = s.id WHERE MONTH(c.fecha) = MONTH(CURDATE()) AND YEAR(c.fecha) = YEAR(CURDATE()) AND c.estado = 'completada'",
-    clientes_totales:
-      "SELECT COUNT(*) as total FROM usuarios WHERE rol = 'cliente'",
-    barberos_activos:
-      "SELECT COUNT(*) as total FROM usuarios WHERE rol = 'barbero'",
-    tasa_ocupacion_hoy:
-      "SELECT COUNT(*) as total FROM citas WHERE fecha = CURDATE() AND estado IN ('pendiente', 'confirmada')",
+
+  // Citas de hoy (no canceladas)
+  const [citasHoy] = await pool.execute(
+    `SELECT COUNT(*) as total FROM citas 
+     WHERE fecha = CURDATE() AND estado != 'cancelada'`,
+  );
+
+  // Citas pendientes (futuras)
+  const [citasPendientes] = await pool.execute(
+    `SELECT COUNT(*) as total FROM citas 
+     WHERE estado = 'pendiente' AND fecha >= CURDATE()`,
+  );
+
+  // Ingresos del mes (SOLO citas completadas)
+  const [ingresosMes] = await pool.execute(
+    `SELECT COALESCE(SUM(s.precio), 0) as total 
+     FROM citas c 
+     INNER JOIN servicios s ON c.servicio_id = s.id 
+     WHERE MONTH(c.fecha) = MONTH(CURDATE()) 
+       AND YEAR(c.fecha) = YEAR(CURDATE()) 
+       AND c.estado = 'completada'`,
+  );
+
+  // Clientes totales
+  const [clientesTotales] = await pool.execute(
+    `SELECT COUNT(*) as total FROM usuarios WHERE rol = 'cliente'`,
+  );
+
+  // Barberos activos
+  const [barberosActivos] = await pool.execute(
+    `SELECT COUNT(*) as total FROM usuarios WHERE rol = 'barbero'`,
+  );
+
+  // Citas de hoy por barbero (para tasa de ocupación)
+  const [citasHoyPorBarbero] = await pool.execute(
+    `SELECT c.barbero_id, COUNT(c.id) as total
+     FROM citas c
+     WHERE c.fecha = CURDATE() AND c.estado IN ('pendiente', 'confirmada')
+     GROUP BY c.barbero_id`,
+  );
+
+  // Horas laborales por barbero (asumiendo 8 horas por defecto)
+  const barberosCount = barberosActivos[0].total || 1;
+  const totalCitasHoy = citasHoyPorBarbero.reduce((sum, b) => sum + b.total, 0);
+  const capacidadMaxima = barberosCount * 8; // 8 horas * número de barberos
+  const tasaOcupacion =
+    capacidadMaxima > 0
+      ? ((totalCitasHoy / capacidadMaxima) * 100).toFixed(1)
+      : 0;
+
+  return {
+    citas_hoy: citasHoy[0].total,
+    citas_pendientes: citasPendientes[0].total,
+    ingresos_mes: ingresosMes[0].total,
+    clientes_totales: clientesTotales[0].total,
+    barberos_activos: barberosActivos[0].total,
+    tasa_ocupacion: tasaOcupacion,
+    citas_hoy_detalle: citasHoyPorBarbero,
   };
-  const entries = Object.entries(queries);
-  const allRows = await Promise.all(entries.map(([, q]) => pool.execute(q)));
-  const results = {};
-  entries.forEach(([key], i) => {
-    results[key] = allRows[i][0][0].total;
-  });
-  const barberos = results.barberos_activos || 1;
-  results.tasa_ocupacion = (
-    (results.tasa_ocupacion_hoy / (barberos * 8)) *
-    100
-  ).toFixed(1);
-  return results;
 };
 
 export const getTasaCancelacionPorBarbero = async (
@@ -472,6 +554,23 @@ export const updateCitaAdmin = async (id, citaData) => {
     }
   }
   return getCitaById(id);
+};
+
+/**
+ * Obtiene el horario de un barbero para un día específico
+ */
+export const getHorarioBarberoPorDia = async (barbero_id, fecha) => {
+  const pool = getPool();
+  const diaSemana = getDiaSemana(fecha);
+
+  const [rows] = await pool.execute(
+    `SELECT hora_inicio, hora_fin, activo 
+     FROM horarios_barbero 
+     WHERE barbero_id = ? AND dia_semana = ? AND activo = TRUE`,
+    [barbero_id, diaSemana],
+  );
+
+  return rows[0] || null;
 };
 
 export default {

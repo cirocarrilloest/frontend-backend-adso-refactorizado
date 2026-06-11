@@ -190,6 +190,25 @@ export const getHorariosDisponibles = async ({
     return { notFound: "Barbero no encontrado" };
   }
 
+  // 1. Validar que el día sea laborable según configuración global
+  const { esDiaLaborable } = await import("../utils/dateUtils.js");
+  if (!esDiaLaborable(fecha)) {
+    return { horarios: [], mensaje: "El negocio no labora este día" };
+  }
+
+  // 2. Validar que el barbero tenga horario configurado para ese día
+  const horarioBarbero = await citaModel.getHorarioBarberoPorDia(
+    barberoId,
+    fecha,
+  );
+  if (!horarioBarbero) {
+    return {
+      horarios: [],
+      mensaje: "El barbero no tiene horario configurado para este día",
+    };
+  }
+
+  // 3. Generar slots según horario del barbero
   const disponibles = await citaModel.getHorariosDisponibles(
     barberoId,
     fecha,
