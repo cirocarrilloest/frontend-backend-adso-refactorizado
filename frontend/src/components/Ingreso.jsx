@@ -1,8 +1,10 @@
-// Frontend/src/components/Ingreso.jsx
+// frontend/src/components/Ingreso.jsx
+
 import React, { useState } from "react";
 import { ingresar } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { validarEmail, validarPassword } from "../utils/validaciones";
 
 export const Ingreso = ({ onSwitch }) => {
   const [form, setForm] = useState({ email: "", pass: "" });
@@ -15,7 +17,6 @@ export const Ingreso = ({ onSwitch }) => {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
-    // Limpiar error del campo cuando el usuario escribe
     if (erroresCampos[e.target.name]) {
       setErroresCampos({ ...erroresCampos, [e.target.name]: "" });
     }
@@ -23,16 +24,11 @@ export const Ingreso = ({ onSwitch }) => {
 
   const validarFormulario = () => {
     const nuevosErrores = {};
+    const errorEmail = validarEmail(form.email);
+    if (errorEmail) nuevosErrores.email = errorEmail;
 
-    if (!form.email.trim()) {
-      nuevosErrores.email = "El email es requerido";
-    } else if (!/\S+@\S+\.\S+/.test(form.email)) {
-      nuevosErrores.email = "El email no es válido";
-    }
-
-    if (!form.pass) {
-      nuevosErrores.pass = "La contraseña es requerida";
-    }
+    const errorPass = validarPassword(form.pass);
+    if (errorPass) nuevosErrores.pass = errorPass;
 
     setErroresCampos(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
@@ -41,9 +37,7 @@ export const Ingreso = ({ onSwitch }) => {
   const handleSubmit = async () => {
     setError("");
 
-    if (!validarFormulario()) {
-      return;
-    }
+    if (!validarFormulario()) return;
 
     setCargando(true);
     try {

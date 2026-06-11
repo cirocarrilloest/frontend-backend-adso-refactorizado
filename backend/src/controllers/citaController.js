@@ -1,11 +1,5 @@
 // src/controllers/citaController.js
-/**
- * Controller de citas.
- * ÚNICA RESPONSABILIDAD: Leer el request, llamar al service correspondiente,
- * mapear el resultado a una respuesta HTTP.
- *
- * NO contiene lógica de negocio. Antes tenía 650+ líneas mezclando todo.
- */
+// VERSIÓN COMPLETA - SOLO ORQUESTACIÓN HTTP
 
 import * as citaService from "../services/citaService.js";
 import citaModel from "../models/citaModel.js";
@@ -19,15 +13,11 @@ import {
   serverError,
 } from "../utils/responseUtils.js";
 
-/**
- * Mapea el resultado de un service al response HTTP correcto.
- * Centraliza el manejo de los distintos tipos de error que retornan los services.
- */
 const manejarResultado = (res, resultado, successHandler) => {
-  if (resultado.notFound) return notFound(res, resultado.notFound);
-  if (resultado.forbidden) return forbidden(res, resultado.forbidden);
-  if (resultado.conflict) return conflict(res, resultado.conflict);
-  if (resultado.error) return badRequest(res, resultado.error);
+  if (resultado?.notFound) return notFound(res, resultado.notFound);
+  if (resultado?.forbidden) return forbidden(res, resultado.forbidden);
+  if (resultado?.conflict) return conflict(res, resultado.conflict);
+  if (resultado?.error) return badRequest(res, resultado.error);
   return successHandler(resultado);
 };
 
@@ -323,10 +313,7 @@ export const crearCitaAdmin = async (req, res) => {
     const { cliente_id, barbero_id, servicio_id, fecha, hora, notas } =
       req.body;
     if (!cliente_id || !barbero_id || !servicio_id || !fecha || !hora) {
-      return badRequest(
-        res,
-        "Todos los campos son requeridos: cliente_id, barbero_id, servicio_id, fecha, hora",
-      );
+      return badRequest(res, "Todos los campos son requeridos");
     }
 
     const resultado = await citaService.crearCitaAdmin({
@@ -357,50 +344,19 @@ export const getAllCitas = async (req, res) => {
     if (page <= 0) page = 1;
     if (limit <= 0 || limit > 100) limit = 15;
 
-    const { getPool } = await import("../config/db.js");
-    const pool = getPool();
-    const offset = (page - 1) * limit;
-
-    let where = "";
-    const params = [];
-    if (estado) {
-      where += " AND c.estado = ?";
-      params.push(estado);
-    }
-    if (fecha_desde) {
-      where += " AND c.fecha >= ?";
-      params.push(fecha_desde);
-    }
-    if (fecha_hasta) {
-      where += " AND c.fecha <= ?";
-      params.push(fecha_hasta);
-    }
-
-    const [rows] = await pool.execute(
-      `SELECT c.id, c.fecha, c.hora, c.estado, c.notas, c.created_at, c.updated_at,
-              cli.id as cliente_id, cli.nombre as cliente_nombre, cli.email as cliente_email,
-              bar.id as barbero_id, bar.nombre as barbero_nombre,
-              s.id as servicio_id, s.nombre as servicio_nombre, s.duracion, s.precio
-       FROM citas c
-       LEFT JOIN usuarios cli ON c.cliente_id = cli.id
-       LEFT JOIN usuarios bar ON c.barbero_id = bar.id
-       LEFT JOIN servicios s ON c.servicio_id = s.id
-       WHERE 1=1 ${where}
-       ORDER BY c.fecha DESC, c.hora DESC
-       LIMIT ${limit} OFFSET ${offset}`,
-      params,
-    );
-
-    const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM citas c WHERE 1=1 ${where}`,
-      params,
-    );
+    const citas = await citaModel.getAllCitas({
+      estado,
+      fecha_desde,
+      fecha_hasta,
+    });
+    const total = citas.length;
+    const paginated = citas.slice((page - 1) * limit, page * limit);
 
     return ok(res, {
-      citas: rows,
-      total: countResult[0].total,
+      citas: paginated,
+      total,
       page,
-      totalPages: Math.ceil(countResult[0].total / limit),
+      totalPages: Math.ceil(total / limit),
       limit,
     });
   } catch (error) {

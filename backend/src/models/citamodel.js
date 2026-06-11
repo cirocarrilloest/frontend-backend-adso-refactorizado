@@ -18,13 +18,23 @@ export const createCita = async (citaData) => {
   );
   return getCitaById(result.insertId);
 };
-
-export const verificarDuplicado = async (barbero_id, fecha, hora) => {
+// Modificar verificarDuplicado para aceptar exclusión de una cita
+export const verificarDuplicado = async (
+  barbero_id,
+  fecha,
+  hora,
+  excludeId = null,
+) => {
   const pool = getPool();
-  const [rows] = await pool.execute(
-    "SELECT id FROM citas WHERE barbero_id = ? AND fecha = ? AND hora = ? AND estado IN ('pendiente', 'confirmada')",
-    [barbero_id, fecha, hora],
-  );
+  let query = `SELECT id FROM citas WHERE barbero_id = ? AND fecha = ? AND hora = ? AND estado IN ('pendiente', 'confirmada')`;
+  const params = [barbero_id, fecha, hora];
+
+  if (excludeId) {
+    query += ` AND id != ?`;
+    params.push(excludeId);
+  }
+
+  const [rows] = await pool.execute(query, params);
   return rows.length > 0;
 };
 
@@ -405,25 +415,63 @@ export const verificarHorarioLaboral = async (barbero_id, fecha, hora) => {
     horaStr < String(rows[0].hora_fin).substring(0, 5)
   );
 };
-
+// Añadir método updateCitaAdmin (actualización completa)
 export const updateCitaAdmin = async (id, citaData) => {
   const pool = getPool();
   const { cliente_id, barbero_id, servicio_id, fecha, hora, estado, notas } =
     citaData;
-  const [result] = await pool.execute(
-    "UPDATE citas SET cliente_id = ?, barbero_id = ?, servicio_id = ?, fecha = ?, hora = ?, estado = ?, notas = ? WHERE id = ?",
-    [
-      cliente_id,
-      barbero_id,
-      servicio_id,
-      fecha,
-      hora,
-      estado,
-      notas || null,
-      id,
-    ],
-  );
-  return result.affectedRows > 0 ? getCitaById(id) : null;
+
+  if (
+    cliente_id !== undefined ||
+    barbero_id !== undefined ||
+    servicio_id !== undefined ||
+    fecha !== undefined ||
+    hora !== undefined ||
+    estado !== undefined ||
+    notas !== undefined
+  ) {
+    const updates = [];
+    const values = [];
+
+    if (cliente_id !== undefined) {
+      updates.push("cliente_id = ?");
+      values.push(cliente_id);
+    }
+    if (barbero_id !== undefined) {
+      updates.push("barbero_id = ?");
+      values.push(barbero_id);
+    }
+    if (servicio_id !== undefined) {
+      updates.push("servicio_id = ?");
+      values.push(servicio_id);
+    }
+    if (fecha !== undefined) {
+      updates.push("fecha = ?");
+      values.push(fecha);
+    }
+    if (hora !== undefined) {
+      updates.push("hora = ?");
+      values.push(hora);
+    }
+    if (estado !== undefined) {
+      updates.push("estado = ?");
+      values.push(estado);
+    }
+    if (notas !== undefined) {
+      updates.push("notas = ?");
+      values.push(notas || null);
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = NOW()");
+      values.push(id);
+      await pool.execute(
+        `UPDATE citas SET ${updates.join(", ")} WHERE id = ?`,
+        values,
+      );
+    }
+  }
+  return getCitaById(id);
 };
 
 export default {

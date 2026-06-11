@@ -24,7 +24,7 @@ import { getBarberos } from "../../services/usuarioService";
 import { getServicios } from "../../services/servicioService";
 import { getHorariosDisponibles as getHorariosDisp } from "../../services/citaService";
 import PerfilView from "../dashboard/PerfilView.jsx";
-import PerfilBarberoCard from "./PerfilBarberoCard.jsx"; // ← NUEVO
+import PerfilBarberoCard from "./PerfilBarberoCard.jsx";
 import VistaMisCitas from "./VistaMisCitas.jsx";
 function Spinner() {
   return (

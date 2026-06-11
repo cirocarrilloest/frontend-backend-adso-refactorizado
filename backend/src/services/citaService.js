@@ -1,47 +1,26 @@
 // src/services/citaService.js
-/**
- * Capa de servicio para citas.
- * Contiene toda la lógica de negocio que antes vivía mezclada en citaController.js.
- *
- * RESPONSABILIDADES:
- *   - Orquestar validaciones de negocio (barbero válido, servicio activo, horario laboral)
- *   - Coordinar acceso a datos (citaModel, servicioModel, userModel)
- *   - Crear notificaciones como efecto secundario de las operaciones
- *
- * NO RESPONSABLE DE:
- *   - Leer req.body / req.params (eso es del controller)
- *   - Escribir res.json() (eso es del controller)
- *   - SQL directo (eso es del model/repository)
- */
+// VERSIÓN COMPLETA Y REFACTORIZADA - SIN SQL DIRECTO
 
 import citaModel from "../models/citaModel.js";
-import * as servicioModel from "../models/servicioModel.js";
-import { getUserById } from "../models/userModel.js";
+import servicioRepository from "../repositories/servicioRepository.js";
+import userRepository from "../repositories/userRepository.js";
 import { crearNotificacion } from "../models/notificacionModel.js";
-import { getPool } from "../config/db.js";
 import { validarFechaHoraFutura, normalizarFecha } from "../utils/dateUtils.js";
-
-// ─── Helpers internos ───────────────────────────────────────────────────────
 
 const ESTADOS_VALIDOS = ["pendiente", "confirmada", "completada", "cancelada"];
 
-/**
- * Verifica que el ID hace referencia a un barbero existente.
- * Reutilizada en varios métodos del service.
- */
+// ─── Helpers internos ───────────────────────────────────────────────────────
+
 const verificarBarbero = async (barberoId) => {
-  const barbero = await getUserById(barberoId);
+  const barbero = await userRepository.findById(barberoId);
   if (!barbero || barbero.rol !== "barbero") {
     return { error: "El barbero seleccionado no es válido" };
   }
   return { barbero };
 };
 
-/**
- * Verifica que el ID hace referencia a un servicio activo.
- */
 const verificarServicio = async (servicioId) => {
-  const servicio = await servicioModel.getServicioById(servicioId);
+  const servicio = await servicioRepository.findById(servicioId);
   if (!servicio || !servicio.activo) {
     return { error: "El servicio seleccionado no está disponible" };
   }
@@ -50,10 +29,6 @@ const verificarServicio = async (servicioId) => {
 
 // ─── Operaciones de cliente ──────────────────────────────────────────────────
 
-/**
- * Crea una nueva cita.
- * Antes: toda esta lógica estaba en agendarCita() del controller.
- */
 export const agendarCita = async ({
   clienteId,
   barberoId,
@@ -116,9 +91,6 @@ export const agendarCita = async ({
   return { cita: nuevaCita };
 };
 
-/**
- * Reagenda una cita existente.
- */
 export const reagendarCita = async ({
   citaId,
   fecha,
@@ -167,9 +139,6 @@ export const reagendarCita = async ({
   return { cita: citaActualizada };
 };
 
-/**
- * Cancela una cita con verificación de permisos por rol.
- */
 export const cancelarCita = async ({
   citaId,
   usuarioId,
@@ -211,17 +180,15 @@ export const cancelarCita = async ({
 
 // ─── Operaciones de barbero/admin ────────────────────────────────────────────
 
-/**
- * Obtiene los horarios disponibles para un barbero en una fecha,
- * filtrando los slots pasados si la fecha es hoy.
- */
 export const getHorariosDisponibles = async ({
   barberoId,
   fecha,
   duracionSlot = 30,
 }) => {
-  const { barbero, error } = await verificarBarbero(barberoId);
-  if (error) return { notFound: error };
+  const barbero = await userRepository.findById(barberoId);
+  if (!barbero || barbero.rol !== "barbero") {
+    return { notFound: "Barbero no encontrado" };
+  }
 
   const disponibles = await citaModel.getHorariosDisponibles(
     barberoId,
@@ -240,9 +207,6 @@ export const getHorariosDisponibles = async ({
   return { horarios: slotsFiltrados, barbero };
 };
 
-/**
- * Actualiza el estado de una cita con verificación de permisos.
- */
 export const actualizarEstadoCita = async ({
   citaId,
   estado,
@@ -267,9 +231,6 @@ export const actualizarEstadoCita = async ({
   return { cita: citaActualizada };
 };
 
-/**
- * Confirma una cita pendiente y notifica al cliente.
- */
 export const confirmarCita = async ({ citaId, usuarioId, usuarioRol }) => {
   const cita = await citaModel.getCitaById(citaId);
   if (!cita) return { notFound: "Cita no encontrada" };
@@ -300,9 +261,6 @@ export const confirmarCita = async ({ citaId, usuarioId, usuarioRol }) => {
   return { cita: citaConfirmada };
 };
 
-/**
- * Finaliza una cita confirmada y notifica al cliente.
- */
 export const finalizarCita = async ({ citaId, usuarioId, usuarioRol }) => {
   const cita = await citaModel.getCitaById(citaId);
   if (!cita) return { notFound: "Cita no encontrada" };
@@ -329,9 +287,6 @@ export const finalizarCita = async ({ citaId, usuarioId, usuarioRol }) => {
 
 // ─── Operaciones de administrador ───────────────────────────────────────────
 
-/**
- * Crea una cita en nombre de cualquier cliente (flujo admin).
- */
 export const crearCitaAdmin = async ({
   clienteId,
   barberoId,
@@ -340,192 +295,131 @@ export const crearCitaAdmin = async ({
   hora,
   notas,
 }) => {
-  const pool = getPool();
-
-  const [clientes] = await pool.execute(
-    "SELECT id, nombre, email FROM usuarios WHERE id = ? AND rol = 'cliente'",
-    [clienteId],
-  );
-  if (clientes.length === 0)
+  // Validar cliente
+  const cliente = await userRepository.findById(clienteId);
+  if (!cliente || cliente.rol !== "cliente") {
     return { notFound: "Cliente no encontrado o no es un cliente válido" };
+  }
 
-  const [barberos] = await pool.execute(
-    "SELECT id, nombre FROM usuarios WHERE id = ? AND rol = 'barbero'",
-    [barberoId],
-  );
-  if (barberos.length === 0) return { notFound: "Barbero no encontrado" };
+  // Validar barbero
+  const barbero = await userRepository.findById(barberoId);
+  if (!barbero || barbero.rol !== "barbero") {
+    return { notFound: "Barbero no encontrado" };
+  }
 
-  const [servicios] = await pool.execute(
-    "SELECT id, nombre, duracion, precio FROM servicios WHERE id = ? AND activo = TRUE",
-    [servicioId],
-  );
-  if (servicios.length === 0)
+  // Validar servicio
+  const servicio = await servicioRepository.findById(servicioId);
+  if (!servicio || !servicio.activo) {
     return { notFound: "Servicio no encontrado o inactivo" };
+  }
 
   const errorFecha = validarFechaHoraFutura(fecha, hora);
   if (errorFecha) return { error: errorFecha.message };
 
-  const [ocupado] = await pool.execute(
-    "SELECT id FROM citas WHERE barbero_id = ? AND fecha = ? AND hora = ? AND estado NOT IN ('cancelada')",
-    [barberoId, fecha, hora],
-  );
-  if (ocupado.length > 0)
-    return { error: "El horario seleccionado no está disponible" };
+  // Verificar disponibilidad
+  const duplicado = await citaModel.verificarDuplicado(barberoId, fecha, hora);
+  if (duplicado) return { error: "El horario seleccionado no está disponible" };
 
-  const [result] = await pool.execute(
-    "INSERT INTO citas (cliente_id, barbero_id, servicio_id, fecha, hora, estado, notas, created_at) VALUES (?, ?, ?, ?, ?, 'confirmada', ?, NOW())",
-    [clienteId, barberoId, servicioId, fecha, hora, notas || null],
-  );
+  // Crear cita (confirmada directamente por admin)
+  const citaCreada = await citaModel.createCita({
+    cliente_id: clienteId,
+    barbero_id: barberoId,
+    servicio_id: servicioId,
+    fecha,
+    hora,
+    notas,
+    estado: "confirmada",
+  });
 
-  const [citaCreada] = await pool.execute(
-    `SELECT c.id, c.fecha, c.hora, c.estado, c.notas, c.created_at,
-            s.id as servicio_id, s.nombre as servicio_nombre, s.duracion, s.precio,
-            u.id as cliente_id, u.nombre as cliente_nombre, u.email as cliente_email,
-            b.id as barbero_id, b.nombre as barbero_nombre
-     FROM citas c
-     INNER JOIN servicios s ON c.servicio_id = s.id
-     INNER JOIN usuarios u ON c.cliente_id = u.id
-     INNER JOIN usuarios b ON c.barbero_id = b.id
-     WHERE c.id = ?`,
-    [result.insertId],
-  );
-
+  // Notificaciones
   await crearNotificacion(
     clienteId,
     "cita_nueva",
     "Cita agendada por administrador",
-    `El administrador agendó tu cita de ${servicios[0].nombre} el ${fecha} a las ${hora} con ${barberos[0].nombre}`,
-    { citaId: result.insertId },
+    `El administrador agendó tu cita de ${servicio.nombre} el ${fecha} a las ${hora} con ${barbero.nombre}`,
+    { citaId: citaCreada.id },
   );
 
   await crearNotificacion(
     barberoId,
     "cita_nueva",
     "Nueva cita asignada",
-    `Se te ha asignado una nueva cita de ${clientes[0].nombre} el ${fecha} a las ${hora} - ${servicios[0].nombre}`,
-    { citaId: result.insertId },
+    `Se te ha asignado una nueva cita de ${cliente.nombre} el ${fecha} a las ${hora} - ${servicio.nombre}`,
+    { citaId: citaCreada.id },
   );
 
-  return { cita: citaCreada[0] };
+  return { cita: citaCreada };
 };
 
-/**
- * Edita una cita completa como administrador con notificaciones automáticas.
- */
 export const editarCitaAdmin = async ({ citaId, campos }) => {
-  const pool = getPool();
+  const citaExistente = await citaModel.getCitaById(citaId);
+  if (!citaExistente) return { notFound: "Cita no encontrada" };
 
-  const [citaExistente] = await pool.execute(
-    `SELECT c.*, u.nombre as cliente_nombre FROM citas c LEFT JOIN usuarios u ON c.cliente_id = u.id WHERE c.id = ?`,
-    [citaId],
-  );
-  if (!citaExistente[0]) return { notFound: "Cita no encontrada" };
-
-  const original = citaExistente[0];
-  const { fecha, hora, barbero_id, servicio_id, notas, estado } = campos;
-
-  if (fecha || hora) {
+  // Validar fecha si se está cambiando
+  if (campos.fecha || campos.hora) {
     const errorFecha = validarFechaHoraFutura(
-      fecha || original.fecha,
-      hora || original.hora,
+      campos.fecha || citaExistente.fecha,
+      campos.hora || citaExistente.hora,
     );
     if (errorFecha) return { error: errorFecha.message };
   }
 
-  if (barbero_id !== undefined || fecha !== undefined || hora !== undefined) {
-    const [dup] = await pool.execute(
-      "SELECT id FROM citas WHERE barbero_id = ? AND fecha = ? AND hora = ? AND id != ? AND estado NOT IN ('cancelada')",
-      [
-        barbero_id ?? original.barbero_id,
-        fecha ?? original.fecha,
-        hora ?? original.hora,
-        citaId,
-      ],
+  // Verificar duplicado si cambia barbero/fecha/hora
+  if (
+    campos.barbero_id !== undefined ||
+    campos.fecha !== undefined ||
+    campos.hora !== undefined
+  ) {
+    const duplicado = await citaModel.verificarDuplicado(
+      campos.barbero_id ?? citaExistente.barbero_id,
+      campos.fecha ?? citaExistente.fecha,
+      campos.hora ?? citaExistente.hora,
+      citaId,
     );
-    if (dup.length > 0)
+    if (duplicado)
       return { conflict: "El barbero ya tiene una cita en ese horario" };
   }
 
-  const updates = [];
-  const params = [];
-  if (fecha !== undefined) {
-    updates.push("fecha = ?");
-    params.push(fecha);
-  }
-  if (hora !== undefined) {
-    updates.push("hora = ?");
-    params.push(hora);
-  }
-  if (barbero_id !== undefined) {
-    updates.push("barbero_id = ?");
-    params.push(barbero_id);
-  }
-  if (servicio_id !== undefined) {
-    updates.push("servicio_id = ?");
-    params.push(servicio_id);
-  }
-  if (notas !== undefined) {
-    updates.push("notas = ?");
-    params.push(notas ?? null);
-  }
-  if (estado !== undefined && estado !== original.estado) {
-    updates.push("estado = ?");
-    params.push(estado);
-  }
-
-  if (updates.length === 0) return { error: "No hay campos para actualizar" };
-
-  updates.push("updated_at = NOW()");
-  params.push(citaId);
-  await pool.execute(
-    `UPDATE citas SET ${updates.join(", ")} WHERE id = ?`,
-    params,
-  );
+  // Actualizar cita
+  const citaActualizada = await citaModel.updateCitaAdmin(citaId, campos);
 
   // Notificaciones de cambios importantes
-  if ((fecha || hora) && original.cliente_id) {
-    const nuevaFecha = fecha ?? original.fecha;
-    const nuevaHora = hora ?? original.hora;
+  if ((campos.fecha || campos.hora) && citaExistente.cliente_id) {
     await crearNotificacion(
-      original.cliente_id,
+      citaExistente.cliente_id,
       "cita_editada_admin",
       "Tu cita fue modificada",
-      `Tu cita ha sido modificada. Nueva fecha: ${nuevaFecha} a las ${String(nuevaHora).substring(0, 5)}`,
-      { citaId, cambios: { fecha, hora, barbero_id, estado } },
+      `Tu cita ha sido modificada. Nueva fecha: ${campos.fecha || citaExistente.fecha} a las ${String(campos.hora || citaExistente.hora).substring(0, 5)}`,
+      { citaId, cambios: campos },
     );
   }
 
-  if (barbero_id !== undefined && barbero_id !== original.barbero_id) {
-    if (original.barbero_id) {
+  if (
+    campos.barbero_id !== undefined &&
+    campos.barbero_id !== citaExistente.barbero_id
+  ) {
+    if (citaExistente.barbero_id) {
       await crearNotificacion(
-        original.barbero_id,
+        citaExistente.barbero_id,
         "cita_editada_admin",
         "Cita reasignada",
         `La cita #${citaId} ya no está asignada a ti`,
         { citaId },
       );
     }
-    if (barbero_id) {
-      await crearNotificacion(
-        barbero_id,
-        "cita_editada_admin",
-        "Nueva cita asignada",
-        `Se te ha asignado una cita para el ${fecha ?? original.fecha} a las ${String(hora ?? original.hora).substring(0, 5)}`,
-        { citaId },
-      );
+    if (campos.barbero_id) {
+      const nuevoBarbero = await userRepository.findById(campos.barbero_id);
+      if (nuevoBarbero) {
+        await crearNotificacion(
+          campos.barbero_id,
+          "cita_editada_admin",
+          "Nueva cita asignada",
+          `Se te ha asignado una cita para el ${campos.fecha || citaExistente.fecha} a las ${String(campos.hora || citaExistente.hora).substring(0, 5)}`,
+          { citaId },
+        );
+      }
     }
   }
 
-  const [citaActualizada] = await pool.execute(
-    `SELECT c.*, u.nombre as cliente_nombre, u.email as cliente_email,
-            b.nombre as barbero_nombre, s.nombre as servicio_nombre, s.duracion, s.precio
-     FROM citas c
-     LEFT JOIN usuarios u ON c.cliente_id = u.id
-     LEFT JOIN usuarios b ON c.barbero_id = b.id
-     LEFT JOIN servicios s ON c.servicio_id = s.id
-     WHERE c.id = ?`,
-    [citaId],
-  );
-
-  return { cita: citaActualizada[0] };
+  return { cita: citaActualizada };
 };

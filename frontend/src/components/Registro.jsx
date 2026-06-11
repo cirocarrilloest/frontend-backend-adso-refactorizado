@@ -1,6 +1,14 @@
-// Frontend/src/components/Registro.jsx
+// frontend/src/components/Registro.jsx
+
 import React, { useState } from "react";
 import { registrar } from "../services/authService";
+import {
+  validarNombre,
+  validarEmail,
+  validarPassword,
+  validarConfirmacionPassword,
+  validarTelefono,
+} from "../utils/validaciones";
 
 export const Registro = ({ onSwitch }) => {
   const [form, setForm] = useState({
@@ -17,7 +25,6 @@ export const Registro = ({ onSwitch }) => {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
-    // Limpiar error del campo cuando el usuario escribe
     if (erroresCampos[e.target.name]) {
       setErroresCampos({ ...erroresCampos, [e.target.name]: "" });
     }
@@ -26,31 +33,23 @@ export const Registro = ({ onSwitch }) => {
   const validarFormulario = () => {
     const nuevosErrores = {};
 
-    if (!form.nombre.trim()) {
-      nuevosErrores.nombre = "El nombre es requerido";
-    } else if (form.nombre.length < 2) {
-      nuevosErrores.nombre = "El nombre debe tener al menos 2 caracteres";
-    }
+    const errorNombre = validarNombre(form.nombre);
+    if (errorNombre) nuevosErrores.nombre = errorNombre;
 
-    if (!form.email.trim()) {
-      nuevosErrores.email = "El email es requerido";
-    } else if (!/\S+@\S+\.\S+/.test(form.email)) {
-      nuevosErrores.email = "El email no es válido";
-    }
+    const errorEmail = validarEmail(form.email);
+    if (errorEmail) nuevosErrores.email = errorEmail;
 
-    if (!form.pass) {
-      nuevosErrores.pass = "La contraseña es requerida";
-    } else if (form.pass.length < 6) {
-      nuevosErrores.pass = "La contraseña debe tener al menos 6 caracteres";
-    }
+    const errorPass = validarPassword(form.pass);
+    if (errorPass) nuevosErrores.pass = errorPass;
 
-    if (form.pass !== form.confirmarPass) {
-      nuevosErrores.confirmarPass = "Las contraseñas no coinciden";
-    }
+    const errorConfirmar = validarConfirmacionPassword(
+      form.pass,
+      form.confirmarPass,
+    );
+    if (errorConfirmar) nuevosErrores.confirmarPass = errorConfirmar;
 
-    if (form.telefono && !/^[0-9+\-\s()]+$/.test(form.telefono)) {
-      nuevosErrores.telefono = "El teléfono contiene caracteres no válidos";
-    }
+    const errorTelefono = validarTelefono(form.telefono);
+    if (errorTelefono) nuevosErrores.telefono = errorTelefono;
 
     setErroresCampos(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
@@ -60,13 +59,11 @@ export const Registro = ({ onSwitch }) => {
     setError("");
     setExito("");
 
-    if (!validarFormulario()) {
-      return;
-    }
+    if (!validarFormulario()) return;
 
     setCargando(true);
     try {
-      const data = await registrar({
+      await registrar({
         nombre: form.nombre,
         email: form.email,
         pass: form.pass,
@@ -75,7 +72,6 @@ export const Registro = ({ onSwitch }) => {
 
       setExito("¡Cuenta creada! Ya puedes iniciar sesión.");
 
-      // Limpiar formulario
       setForm({
         nombre: "",
         telefono: "",
