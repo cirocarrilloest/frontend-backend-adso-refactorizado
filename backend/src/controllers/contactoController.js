@@ -1,120 +1,99 @@
 // backend/src/controllers/contactoController.js
 
-import { getPool } from "../config/db.js";
+/**
+ * contactoController.js
+ *
+ * REFACTORIZACIÓN:
+ * - Problema anterior: llamaba getPool() directamente (acceso a datos en controller)
+ * - Problema anterior: no usaba responseUtils — duplicaba el patrón de error
+ * - Problema anterior: el loop de notificaciones a admins mezclaba responsabilidades
+ * - Solución: delegar SQL al repositorio, usar responseUtils, mantener controller
+ *   únicamente como capa HTTP (validar entrada → llamar repo/servicio → responder)
+ *
+ * Principio aplicado: SRP + Dependency Inversion
+ */
+
+import { contactoRepository } from "../repositories/contactoRepository.js";
 import { crearNotificacion } from "../models/notificacionModel.js";
+import {
+  ok,
+  badRequest,
+  notFound,
+  serverError,
+} from "../utils/responseUtils.js";
 
 /**
- * Enviar mensaje de contacto (público)
+ * POST /api/contacto
+ * Público — cualquier visitante puede enviar un mensaje.
  */
 export const enviarMensajeContacto = async (req, res) => {
   try {
     const { name, email, message } = req.body;
 
     if (!name || !email || !message) {
-      return res.status(400).json({
-        ok: false,
-        message: "Nombre, email y mensaje son requeridos",
-      });
+      return badRequest(res, "Nombre, email y mensaje son requeridos");
     }
 
-    const pool = getPool();
-    const query = `
-      INSERT INTO contacto_mensajes (nombre, email, mensaje, fecha, leido)
-      VALUES (?, ?, ?, NOW(), FALSE)
-    `;
+    const mensajeId = await contactoRepository.crear({
+      nombre: name,
+      email,
+      mensaje: message,
+    });
 
-    const [result] = await pool.execute(query, [name, email, message]);
-
-    // Notificar a todos los administradores
-    const [admins] = await pool.execute(
-      "SELECT id FROM usuarios WHERE rol = 'admin'",
+    // Notificar a todos los admins — responsabilidad de servicio de notificaciones
+    const adminIds = await contactoRepository.getAdminIds();
+    await Promise.all(
+      adminIds.map((adminId) =>
+        crearNotificacion(
+          adminId,
+          "contacto",
+          "Nuevo mensaje de contacto",
+          `${name} (${email}) ha enviado un mensaje`,
+          { mensajeId, nombre: name, email },
+        ),
+      ),
     );
 
-    for (const admin of admins) {
-      await crearNotificacion(
-        admin.id,
-        "contacto",
-        "Nuevo mensaje de contacto",
-        `${name} (${email}) ha enviado un mensaje`,
-        { mensajeId: result.insertId, nombre: name, email },
-      );
-    }
-
-    res.json({
-      ok: true,
-      message: "Mensaje enviado exitosamente",
-    });
+    return ok(res, { message: "Mensaje enviado exitosamente" });
   } catch (error) {
-    console.error("Error al enviar mensaje:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "enviarMensajeContacto", error);
   }
 };
+
 /**
- * Obtener mensajes de contacto (solo admin)
+ * GET /api/contacto/mensajes
+ * Solo admin — lista mensajes con filtro opcional de no leídos.
  */
 export const getMensajesContacto = async (req, res) => {
   try {
     const { soloNoLeidos = "false", limite = 50 } = req.query;
-    const pool = getPool();
 
-    // VALIDACIÓN: Asegurar que limite sea un número válido
-    let limiteNumero = parseInt(limite, 10);
-
-    if (isNaN(limiteNumero) || limiteNumero <= 0) {
-      limiteNumero = 50;
-    }
-
-    if (limiteNumero > 100) {
-      limiteNumero = 100;
-    }
-
-    let query = `SELECT * FROM contacto_mensajes`;
-    const params = [];
-
-    if (soloNoLeidos === "true") {
-      query += ` WHERE leido = FALSE`;
-    }
-
-    // SOLUCIÓN CRÍTICA: Usar template string para LIMIT
-    query += ` ORDER BY fecha DESC LIMIT ${limiteNumero}`;
-
-    const [rows] = await pool.execute(query, params);
-    res.json({ ok: true, mensajes: rows });
-  } catch (error) {
-    console.error("Error al obtener mensajes:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-      error: error.message,
+    const mensajes = await contactoRepository.getAll({
+      soloNoLeidos: soloNoLeidos === "true",
+      limite,
     });
+
+    return ok(res, { mensajes });
+  } catch (error) {
+    return serverError(res, "getMensajesContacto", error);
   }
 };
 
 /**
- * Marcar mensaje como leído (solo admin)
+ * PATCH /api/contacto/mensajes/:id/leer
+ * Solo admin — marca un mensaje como leído.
  */
 export const marcarMensajeLeido = async (req, res) => {
   try {
     const { id } = req.params;
-    const pool = getPool();
+    const actualizado = await contactoRepository.marcarLeido(id);
 
-    const [result] = await pool.execute(
-      "UPDATE contacto_mensajes SET leido = TRUE WHERE id = ?",
-      [id],
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        ok: false,
-        message: "Mensaje no encontrado",
-      });
+    if (!actualizado) {
+      return notFound(res, "Mensaje no encontrado");
     }
-    res.json({ ok: true, message: "Mensaje marcado como leído" });
+
+    return ok(res, { message: "Mensaje marcado como leído" });
   } catch (error) {
-    console.error("Error al marcar mensaje:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-      error: error.message,
-    });
+    return serverError(res, "marcarMensajeLeido", error);
   }
 };

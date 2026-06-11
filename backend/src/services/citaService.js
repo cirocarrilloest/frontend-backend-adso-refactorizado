@@ -1,12 +1,12 @@
 // src/services/citaService.js
 // VERSIÓN COMPLETA Y REFACTORIZADA - SIN SQL DIRECTO
 
-import citaModel from "../models/citaModel.js";
+import * as citaModel from "../models/citaModel.js";
 import servicioRepository from "../repositories/servicioRepository.js";
 import userRepository from "../repositories/userRepository.js";
 import { crearNotificacion } from "../models/notificacionModel.js";
 import { validarFechaHoraFutura, normalizarFecha } from "../utils/dateUtils.js";
-
+import { getPool } from "../config/db.js";
 const ESTADOS_VALIDOS = ["pendiente", "confirmada", "completada", "cancelada"];
 
 // ─── Helpers internos ───────────────────────────────────────────────────────
@@ -190,13 +190,38 @@ export const getHorariosDisponibles = async ({
     return { notFound: "Barbero no encontrado" };
   }
 
-  // 1. Validar que el día sea laborable según configuración global
-  const { esDiaLaborable } = await import("../utils/dateUtils.js");
-  if (!esDiaLaborable(fecha)) {
+  // 1. Obtener configuración de días laborables
+  const pool = getPool();
+  const [configRows] = await pool.execute(
+    "SELECT valor FROM configuracion WHERE clave = 'dias_laborales'",
+  );
+
+  let diasLaborables = [
+    "lunes",
+    "martes",
+    "miercoles",
+    "jueves",
+    "viernes",
+    "sabado",
+  ];
+  if (configRows[0] && configRows[0].valor) {
+    const valor = configRows[0].valor;
+    if (Array.isArray(valor)) {
+      diasLaborables = valor.map((d) => d.toLowerCase());
+    } else if (typeof valor === "string") {
+      diasLaborables = valor.split(",").map((d) => d.trim().toLowerCase());
+    }
+  }
+
+  // 2. Validar día laborable
+  const { getDiaSemana } = await import("../utils/dateUtils.js");
+  const diaSemana = getDiaSemana(fecha);
+
+  if (!diasLaborables.includes(diaSemana)) {
     return { horarios: [], mensaje: "El negocio no labora este día" };
   }
 
-  // 2. Validar que el barbero tenga horario configurado para ese día
+  // 3. Validar que el barbero tenga horario configurado para ese día
   const horarioBarbero = await citaModel.getHorarioBarberoPorDia(
     barberoId,
     fecha,
@@ -208,7 +233,7 @@ export const getHorariosDisponibles = async ({
     };
   }
 
-  // 3. Generar slots según horario del barbero
+  // 4. Generar slots según horario del barbero
   const disponibles = await citaModel.getHorariosDisponibles(
     barberoId,
     fecha,

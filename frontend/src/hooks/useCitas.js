@@ -1,27 +1,37 @@
 // frontend/src/hooks/useCitas.js
-import { useState, useCallback } from "react";
-import {
-  getMisCitas,
-  getProximasCitas,
-  getHistorialCitas,
-  agendarCita,
-  cancelarCita,
-  reagendarCita,
-  getCitasBarbero,
-  getAgendaSemana,
-  verificarDisponibilidad,
-} from "../services/citaService";
+/**
+ * useCitas.js
+ *
+ * REFACTORIZACIÓN:
+ * - Problema anterior: reimplementaba el patrón useState + try/catch + setLoading
+ *   siendo que useApi.js ya existía con exactamente ese patrón
+ * - useCitas, useServicios y useUsuarios tenían copias casi idénticas de handleRequest
+ * - Solución: usar useApi como base, exponer funciones memoizadas
+ *
+ * Principio aplicado: DRY — eliminar handleRequest duplicado en 3 hooks
+ *
+ * NOTA IMPORTANTE: los estados `loading` y `error` de este hook son globales
+ * para todas las operaciones del hook. Si necesitas estados independientes por
+ * operación, usa useApi directamente:
+ *   const { loading, error, ejecutar } = useApi(agendarCita)
+ */
 
-export const useCitas = () => {
+import { useCallback, useState } from "react";
+import * as citaService from "../services/citaService";
+
+/**
+ * Wrapper mínimo sobre una función async que maneja loading y error.
+ * Versión simplificada de useApi para uso dentro de hooks de dominio.
+ */
+function useAsyncOperation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleRequest = useCallback(async (fn, ...args) => {
+  const ejecutar = useCallback(async (fn, ...args) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fn(...args);
-      return result;
+      return await fn(...args);
     } catch (err) {
       const message =
         err.response?.data?.message || err.message || "Error en la operación";
@@ -32,57 +42,81 @@ export const useCitas = () => {
     }
   }, []);
 
-  const misCitas = useCallback(
-    () => handleRequest(getMisCitas),
-    [handleRequest],
-  );
-  const proximasCitas = useCallback(
-    () => handleRequest(getProximasCitas),
-    [handleRequest],
-  );
-  const historialCitas = useCallback(
-    (limite) => handleRequest(getHistorialCitas, limite),
-    [handleRequest],
-  );
-  const crearCita = useCallback(
-    (data) => handleRequest(agendarCita, data),
-    [handleRequest],
-  );
-  const cancelar = useCallback(
-    (id) => handleRequest(cancelarCita, id),
-    [handleRequest],
-  );
-  const reagendar = useCallback(
-    (id, data) => handleRequest(reagendarCita, id, data),
-    [handleRequest],
-  );
-  const citasBarbero = useCallback(
-    (barberoId, fecha) => handleRequest(getCitasBarbero, barberoId, fecha),
-    [handleRequest],
-  );
-  const agendaSemana = useCallback(
-    (barberoId, fechaInicio) =>
-      handleRequest(getAgendaSemana, barberoId, fechaInicio),
-    [handleRequest],
-  );
-  const verificar = useCallback(
-    (barberoId, fecha, hora) =>
-      handleRequest(verificarDisponibilidad, barberoId, fecha, hora),
-    [handleRequest],
-  );
+  return { loading, error, ejecutar };
+}
+
+export const useCitas = () => {
+  const { loading, error, ejecutar } = useAsyncOperation();
 
   return {
     loading,
     error,
-    misCitas,
-    proximasCitas,
-    historialCitas,
-    crearCita,
-    cancelarCita: cancelar,
-    reagendarCita: reagendar,
-    citasBarbero,
-    agendaSemana,
-    verificarDisponibilidad: verificar,
+
+    // Cliente
+    misCitas: useCallback(() => ejecutar(citaService.getMisCitas), [ejecutar]),
+    proximasCitas: useCallback(
+      () => ejecutar(citaService.getProximasCitas),
+      [ejecutar],
+    ),
+    historialCitas: useCallback(
+      (limite) => ejecutar(citaService.getHistorialCitas, limite),
+      [ejecutar],
+    ),
+    crearCita: useCallback(
+      (data) => ejecutar(citaService.agendarCita, data),
+      [ejecutar],
+    ),
+    cancelarCita: useCallback(
+      (id) => ejecutar(citaService.cancelarCita, id),
+      [ejecutar],
+    ),
+    reagendarCita: useCallback(
+      (id, data) => ejecutar(citaService.reagendarCita, id, data),
+      [ejecutar],
+    ),
+
+    // Barbero / Admin
+    citasBarbero: useCallback(
+      (barberoId, fecha) =>
+        ejecutar(citaService.getCitasBarbero, barberoId, fecha),
+      [ejecutar],
+    ),
+    agendaSemana: useCallback(
+      (barberoId, fecha) =>
+        ejecutar(citaService.getAgendaSemana, barberoId, fecha),
+      [ejecutar],
+    ),
+    verificarDisponibilidad: useCallback(
+      (barberoId, fecha, hora) =>
+        ejecutar(citaService.verificarDisponibilidad, barberoId, fecha, hora),
+      [ejecutar],
+    ),
+    confirmarCita: useCallback(
+      (id) => ejecutar(citaService.confirmarCita, id),
+      [ejecutar],
+    ),
+    finalizarCita: useCallback(
+      (id) => ejecutar(citaService.finalizarCita, id),
+      [ejecutar],
+    ),
+    actualizarEstado: useCallback(
+      (id, estado) => ejecutar(citaService.actualizarEstadoCita, id, estado),
+      [ejecutar],
+    ),
+
+    // Admin
+    crearCitaAdmin: useCallback(
+      (data) => ejecutar(citaService.crearCitaAdmin, data),
+      [ejecutar],
+    ),
+    getAllCitas: useCallback(
+      (filtros) => ejecutar(citaService.getAllCitas, filtros),
+      [ejecutar],
+    ),
+    getDashboard: useCallback(
+      () => ejecutar(citaService.getDashboard),
+      [ejecutar],
+    ),
   };
 };
 

@@ -3,8 +3,6 @@
 
 /**
  * Valida un email
- * @param {string} email
- * @returns {string|null} Mensaje de error o null si es válido
  */
 export const validarEmail = (email) => {
   if (!email || email.trim() === "") {

@@ -215,27 +215,36 @@ export const getHorariosDisponibles = async (req, res) => {
   try {
     const { id: barberoId } = req.params;
     const { fecha } = req.query;
-    if (!fecha)
-      return badRequest(res, "Se requiere el parámetro fecha (YYYY-MM-DD)");
 
-    const duracionSlot = parseInt(req.config?.duracion_slot?.valor || 30);
+    // La configuración ya está disponible en req.config (del middleware)
+    const config = req.config;
+
     const resultado = await citaService.getHorariosDisponibles({
       barberoId,
       fecha,
-      duracionSlot,
+      config, // Pasar configuración al servicio
+      duracionSlot: 30,
     });
 
-    return manejarResultado(res, resultado, ({ horarios, barbero }) =>
-      ok(res, {
-        barbero_id: barberoId,
-        fecha,
-        duracion_slot: duracionSlot,
-        horarios_disponibles: horarios,
-        total_disponibles: horarios.length,
-      }),
-    );
+    if (resultado.error) {
+      return res.status(400).json({ ok: false, message: resultado.error });
+    }
+
+    if (resultado.notFound) {
+      return res.status(404).json({ ok: false, message: resultado.notFound });
+    }
+
+    res.json({
+      ok: true,
+      horarios_disponibles: resultado.horarios,
+      mensaje: resultado.mensaje,
+    });
   } catch (error) {
-    return serverError(res, "getHorariosDisponibles", error);
+    console.error("Error en getHorariosDisponibles:", error);
+    res.status(500).json({
+      ok: false,
+      message: "Error interno del servidor",
+    });
   }
 };
 

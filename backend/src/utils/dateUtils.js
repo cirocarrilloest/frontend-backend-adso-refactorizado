@@ -79,3 +79,45 @@ export const getDiaSemana = (fecha) => {
   const fechaObj = new Date(anio, mes - 1, dia);
   return diasSemana[fechaObj.getDay()];
 };
+
+/**
+ * Verifica si una fecha es día laborable según la configuración global
+ * NOTA: Esta función requiere que la configuración esté disponible en req.config
+ * Si no hay configuración, usa valores por defecto (lunes a sábado)
+ */
+export const esDiaLaborable = (fecha, config = null) => {
+  const diasSemana = [
+    "domingo",
+    "lunes",
+    "martes",
+    "miercoles",
+    "jueves",
+    "viernes",
+    "sabado",
+  ];
+
+  // Obtener días laborables de la configuración o usar default
+  let diasLaborables = [
+    "lunes",
+    "martes",
+    "miercoles",
+    "jueves",
+    "viernes",
+    "sabado",
+  ];
+
+  if (config && config.dias_laborales) {
+    const diasConfig = config.dias_laborales?.valor || config.dias_laborales;
+    if (Array.isArray(diasConfig)) {
+      diasLaborables = diasConfig.map((d) => d.toLowerCase());
+    } else if (typeof diasConfig === "string") {
+      diasLaborables = diasConfig.split(",").map((d) => d.trim().toLowerCase());
+    }
+  }
+
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  const fechaObj = new Date(anio, mes - 1, dia);
+  const nombreDia = diasSemana[fechaObj.getDay()];
+
+  return diasLaborables.includes(nombreDia);
+};

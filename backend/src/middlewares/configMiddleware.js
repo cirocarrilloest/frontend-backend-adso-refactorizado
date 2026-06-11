@@ -1,145 +1,114 @@
 // backend/src/middlewares/configMiddleware.js
 /**
- * configMiddleware.js - Middleware para cargar configuración global
+ * configMiddleware.js
+ *
+ * REFACTORIZACIÓN:
+ * - Problema anterior: mezclaba 3 responsabilidades en un archivo:
+ *   1. Cargar y cachear configuración del sistema
+ *   2. Validar que una hora está en horario laboral
+ *   3. Validar que una fecha es día laborable
+ * - Solución: separar en secciones claramente delimitadas con exports individuales
+ *   para que cada middleware pueda usarse de forma independiente
+ * - La lógica de helpers (getConfigValue, getConfigNumber) también está disponible
+ *   para usarse en controllers sin necesidad de importar todo el archivo
+ *
+ * Principio aplicado: SRP — cada función exported tiene una sola razón para cambiar
  */
 
 import { getPool } from "../config/db.js";
-import { getAllConfig } from "../models/configModel.js";
+import { configRepository } from "../repositories/configRepository.js";
+
+// ─── 1. CARGA Y CACHÉ DE CONFIGURACIÓN ──────────────────────────────────────
+
+const CONFIG_DEFAULTS = {
+  horario_apertura: { valor: "09:00", tipo: "texto" },
+  horario_cierre: { valor: "20:00", tipo: "texto" },
+  dias_laborales: {
+    valor: ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado"],
+    tipo: "json",
+  },
+  duracion_slot: { valor: 30, tipo: "numero" },
+  permitir_cancelacion: { valor: true, tipo: "booleano" },
+};
 
 /**
- * Middleware que carga la configuración del sistema y la añade a req.config
+ * Middleware que carga la configuración del sistema y la añade a req.config.
+ * Usa caché a nivel de aplicación para evitar una query por request.
+ *
+ * Responsabilidad única: cargar configuración y ponerla disponible en req.config.
  */
 export const cargarConfiguracion = async (req, res, next) => {
   try {
-    // Si ya está cargada en memoria de la app, usar caché
+    // Caché en memoria de la app — evita query por cada request
     if (req.app.get("config")) {
       req.config = req.app.get("config");
       return next();
     }
 
-    // Intentar cargar desde el modelo primero (si existe)
-    let config = {};
+    let config = CONFIG_DEFAULTS;
 
     try {
-      // Usar getAllConfig del modelo si está disponible
-      if (typeof getAllConfig === "function") {
-        config = await getAllConfig();
-      } else {
-        // Fallback: consulta directa a la BD
-        const pool = getPool();
-        const [rows] = await pool.execute(
-          "SELECT clave, valor, tipo FROM configuracion",
-        );
-
-        // Convertir a objeto con valores parseados según su tipo
-        rows.forEach((row) => {
-          let valor = row.valor;
-
-          // Parsear según el tipo
-          switch (row.tipo) {
-            case "numero":
-              valor = Number(valor);
-              break;
-            case "booleano":
-              valor = valor === "true" || valor === true;
-              break;
-            case "json":
-              try {
-                valor = JSON.parse(valor);
-              } catch (e) {
-                console.error(`Error parsing JSON para ${row.clave}:`, e);
-                valor = {};
-              }
-              break;
-            case "texto":
-            default:
-              // Mantener como string
-              break;
-          }
-
-          config[row.clave] = {
-            valor,
-            tipo: row.tipo,
-          };
-        });
-      }
+      config = await configRepository.getAll();
     } catch (modelError) {
+      // Fallback a defaults si la BD no responde — no bloquear la app
       console.warn(
-        "Error cargando desde modelo, usando fallback:",
+        "[configMiddleware] BD no disponible, usando defaults:",
         modelError.message,
       );
-      // Fallback: valores por defecto si no hay BD
-      config = {
-        horario_apertura: { valor: "09:00", tipo: "texto" },
-        horario_cierre: { valor: "20:00", tipo: "texto" },
-        dias_laborales: {
-          valor: [
-            "lunes",
-            "martes",
-            "miercoles",
-            "jueves",
-            "viernes",
-            "sabado",
-          ],
-          tipo: "json",
-        },
-        duracion_slot: { valor: 30, tipo: "numero" },
-        permitir_cancelacion: { valor: true, tipo: "booleano" },
-      };
     }
 
-    // Guardar en memoria de la app (caché global)
     req.app.set("config", config);
     req.config = config;
-
     next();
   } catch (error) {
-    console.error("Error cargando configuración:", error);
-    // Config vacía con valores por defecto para no romper la app
-    req.config = {
-      horario_apertura: { valor: "09:00", tipo: "texto" },
-      horario_cierre: { valor: "20:00", tipo: "texto" },
-      dias_laborales: {
-        valor: ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado"],
-        tipo: "json",
-      },
-      duracion_slot: { valor: 30, tipo: "numero" },
-      permitir_cancelacion: { valor: true, tipo: "booleano" },
-    };
+    console.error(
+      "[configMiddleware] Error crítico cargando configuración:",
+      error,
+    );
+    req.config = CONFIG_DEFAULTS;
     next();
   }
 };
 
 /**
- * Obtiene un valor de configuración por clave
+ * Invalida el caché de configuración almacenado en la app.
+ * Llamar esto después de actualizar configuración en BD.
  */
-export const getConfigValue = (req, key) => {
-  return req.config?.[key]?.valor ?? null;
+export const invalidarCacheConfig = (app) => {
+  app.set("config", null);
 };
 
+// ─── 2. HELPERS DE ACCESO A CONFIGURACIÓN ───────────────────────────────────
+
 /**
- * Obtiene un valor numérico de configuración
+ * Obtiene el valor de una clave de configuración desde req.config.
+ * Retorna null si no existe.
+ */
+export const getConfigValue = (req, key) => req.config?.[key]?.valor ?? null;
+
+/**
+ * Obtiene un valor numérico de configuración con fallback.
  */
 export const getConfigNumber = (req, key, defaultValue = 0) => {
   const val = getConfigValue(req, key);
   return typeof val === "number" ? val : Number(val) || defaultValue;
 };
 
+// ─── 3. VALIDACIÓN DE HORARIO LABORAL GENERAL ───────────────────────────────
+
 /**
- * Valida si una fecha/hora está dentro del horario laboral general
+ * Middleware que valida si una hora (en req.body.hora) está dentro del
+ * horario laboral general configurado en el sistema.
+ *
+ * Responsabilidad única: validar horario — no carga ni parsea configuración.
+ * Requiere que cargarConfiguracion haya corrido antes.
  */
-export const validarHorarioGeneral = async (req, res, next) => {
+export const validarHorarioGeneral = (req, res, next) => {
   const { fecha, hora } = req.body;
+  if (!fecha || !hora) return next();
 
-  if (!fecha || !hora) {
-    return next();
-  }
-
-  const config = req.config;
-  const apertura = config?.horario_apertura?.valor || "09:00";
-  const cierre = config?.horario_cierre?.valor || "20:00";
-
-  // Validar que la hora esté dentro del horario general
+  const apertura = getConfigValue(req, "horario_apertura") || "09:00";
+  const cierre = getConfigValue(req, "horario_cierre") || "20:00";
   const horaStr = hora.substring(0, 5);
 
   if (horaStr < apertura || horaStr >= cierre) {
@@ -152,36 +121,42 @@ export const validarHorarioGeneral = async (req, res, next) => {
   next();
 };
 
+// ─── 4. VALIDACIÓN DE DÍA LABORABLE ─────────────────────────────────────────
+
+const DIAS_SEMANA = [
+  "domingo",
+  "lunes",
+  "martes",
+  "miercoles",
+  "jueves",
+  "viernes",
+  "sabado",
+];
+const DIAS_LABORALES_DEFAULT = [
+  "lunes",
+  "martes",
+  "miercoles",
+  "jueves",
+  "viernes",
+  "sabado",
+];
+
 /**
- * Valida si una fecha es día laborable según configuración
+ * Middleware que valida si una fecha (en req.body.fecha) es un día laborable
+ * según la configuración del sistema.
+ *
+ * Responsabilidad única: validar día — no valida hora ni carga config.
+ * Requiere que cargarConfiguracion haya corrido antes.
  */
-export const validarDiaLaborableGeneral = async (req, res, next) => {
+export const validarDiaLaborableGeneral = (req, res, next) => {
   const { fecha } = req.body;
+  if (!fecha) return next();
 
-  if (!fecha) {
-    return next();
-  }
+  const diasLaborales =
+    getConfigValue(req, "dias_laborales") || DIAS_LABORALES_DEFAULT;
 
-  const config = req.config;
-  const diasLaborales = config?.dias_laborales?.valor || [
-    "lunes",
-    "martes",
-    "miercoles",
-    "jueves",
-    "viernes",
-    "sabado",
-  ];
-  const diasSemana = [
-    "domingo",
-    "lunes",
-    "martes",
-    "miercoles",
-    "jueves",
-    "viernes",
-    "sabado",
-  ];
   const fechaObj = new Date(fecha);
-  const diaSemana = diasSemana[fechaObj.getDay()];
+  const diaSemana = DIAS_SEMANA[fechaObj.getDay()];
 
   if (!diasLaborales.includes(diaSemana)) {
     return res.status(400).json({
@@ -195,6 +170,7 @@ export const validarDiaLaborableGeneral = async (req, res, next) => {
 
 export default {
   cargarConfiguracion,
+  invalidarCacheConfig,
   getConfigValue,
   getConfigNumber,
   validarHorarioGeneral,
