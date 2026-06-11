@@ -1,402 +1,176 @@
-// backend/src/controllers/citaController.js
+// src/controllers/citaController.js
+/**
+ * Controller de citas.
+ * ÚNICA RESPONSABILIDAD: Leer el request, llamar al service correspondiente,
+ * mapear el resultado a una respuesta HTTP.
+ *
+ * NO contiene lógica de negocio. Antes tenía 650+ líneas mezclando todo.
+ */
 
+import * as citaService from "../services/citaService.js";
 import citaModel from "../models/citaModel.js";
-import * as servicioModel from "../models/servicioModel.js";
-import { getUserById } from "../models/userModel.js";
-import { crearNotificacion } from "../models/notificacionModel.js";
-import { getPool } from "../config/db.js";
-import { validarAntelacionCancelacion } from "../middlewares/dateValidationMiddleware.js";
-
-// helper interno
+import {
+  ok,
+  created,
+  badRequest,
+  forbidden,
+  notFound,
+  conflict,
+  serverError,
+} from "../utils/responseUtils.js";
 
 /**
- * Retorna { ok: false, message } si fecha+hora están en el pasado.
- * Retorna null si todo está bien.
+ * Mapea el resultado de un service al response HTTP correcto.
+ * Centraliza el manejo de los distintos tipos de error que retornan los services.
  */
-function validarFechaHoraFutura(fecha, hora) {
-  const ahora = new Date();
-  const hoyStr = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}-${String(ahora.getDate()).padStart(2, "0")}`;
-
-  // Fecha anterior a hoy
-  if (fecha < hoyStr) {
-    return {
-      ok: false,
-      message: `No se puede agendar en una fecha pasada (${fecha})`,
-    };
-  }
-
-  // Misma fecha pero hora pasada
-  if (fecha === hoyStr && hora) {
-    const horaActualStr = `${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-    const horaNorm = String(hora).slice(0, 5);
-    if (horaNorm <= horaActualStr) {
-      return {
-        ok: false,
-        message: `No se puede agendar a una hora que ya pasó. Hora actual: ${horaActualStr}`,
-      };
-    }
-  }
-
-  return null;
-}
-
-// helper servicio
-
-const getServicioById = async (id) => {
-  const pool = getPool();
-  const [rows] = await pool.execute(
-    "SELECT id, nombre, duracion, precio FROM servicios WHERE id = ?",
-    [id],
-  );
-  return rows[0] || null;
+const manejarResultado = (res, resultado, successHandler) => {
+  if (resultado.notFound) return notFound(res, resultado.notFound);
+  if (resultado.forbidden) return forbidden(res, resultado.forbidden);
+  if (resultado.conflict) return conflict(res, resultado.conflict);
+  if (resultado.error) return badRequest(res, resultado.error);
+  return successHandler(resultado);
 };
 
-// FUNCIONES PARA CLIENTES
+// ─── CLIENTE ────────────────────────────────────────────────────────────────
 
-/** Agendar nueva cita */
 export const agendarCita = async (req, res) => {
   try {
-    const { barbero_id, servicio_id, fecha, hora, notas } = req.body;
-    const cliente_id = req.usuario.id;
-
     if (req.usuario.rol !== "cliente" && req.usuario.rol !== "admin") {
-      return res.status(403).json({
-        ok: false,
-        message: "Solo los clientes pueden agendar citas",
-      });
+      return forbidden(res, "Solo los clientes pueden agendar citas");
     }
-
+    const { barbero_id, servicio_id, fecha, hora, notas } = req.body;
     if (!barbero_id || !servicio_id || !fecha || !hora) {
-      return res.status(400).json({
-        ok: false,
-        message:
-          "Faltan campos requeridos: barbero_id, servicio_id, fecha, hora",
-      });
+      return badRequest(
+        res,
+        "Faltan campos requeridos: barbero_id, servicio_id, fecha, hora",
+      );
     }
 
-    // Normalizar fecha
-    let fechaNormalizada = fecha;
-    if (fecha.includes("T")) {
-      fechaNormalizada = fecha.split("T")[0];
-    }
-
-    // FIX: validar fecha Y hora (no solo fecha)
-    const errorFechaHora = validarFechaHoraFutura(fechaNormalizada, hora);
-    if (errorFechaHora) {
-      return res.status(400).json(errorFechaHora);
-    }
-
-    // Validar que el barbero existe
-    const barbero = await getUserById(barbero_id);
-    if (!barbero || barbero.rol !== "barbero") {
-      return res.status(400).json({
-        ok: false,
-        message: "El barbero seleccionado no es válido",
-      });
-    }
-
-    // Validar que el servicio existe y está activo
-    const servicio = await servicioModel.getServicioById(servicio_id);
-    if (!servicio || !servicio.activo) {
-      return res.status(400).json({
-        ok: false,
-        message: "El servicio seleccionado no está disponible",
-      });
-    }
-
-    // Verificar horario laboral
-    const enHorarioLaboral = await citaModel.verificarHorarioLaboral(
-      barbero_id,
-      fechaNormalizada,
-      hora,
-    );
-    if (!enHorarioLaboral) {
-      return res.status(400).json({
-        ok: false,
-        message:
-          "El horario seleccionado está fuera de la jornada laboral del barbero",
-      });
-    }
-
-    // Verificar duplicación
-    const duplicado = await citaModel.verificarDuplicado(
-      barbero_id,
-      fechaNormalizada,
-      hora,
-    );
-    if (duplicado) {
-      return res.status(409).json({
-        ok: false,
-        message: "El barbero ya tiene una cita agendada en ese horario",
-      });
-    }
-
-    const nuevaCita = await citaModel.createCita({
-      cliente_id,
-      barbero_id,
-      servicio_id,
-      fecha: fechaNormalizada,
+    const resultado = await citaService.agendarCita({
+      clienteId: req.usuario.id,
+      barberoId: barbero_id,
+      servicioId: servicio_id,
+      fecha,
       hora,
       notas,
+      clienteNombre: req.usuario.nombre,
     });
 
-    await crearNotificacion(
-      barbero_id,
-      "cita_nueva",
-      "Nueva cita agendada",
-      `${req.usuario.nombre} ha agendado ${servicio.nombre} para el ${fechaNormalizada} a las ${hora}`,
-      {
-        citaId: nuevaCita.id,
-        cliente: req.usuario.nombre,
-        servicio: servicio.nombre,
-      },
+    return manejarResultado(res, resultado, ({ cita }) =>
+      created(res, { message: "Cita agendada exitosamente", cita }),
     );
-
-    res.status(201).json({
-      ok: true,
-      message: "Cita agendada exitosamente",
-      cita: nuevaCita,
-    });
   } catch (error) {
-    console.error("Error al agendar cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "agendarCita", error);
   }
 };
 
-/** Obtener mis citas (cliente) */
 export const getMisCitas = async (req, res) => {
   try {
     const citas = await citaModel.getCitasByCliente(req.usuario.id);
-    res.json({ ok: true, citas });
+    return ok(res, { citas });
   } catch (error) {
-    console.error("Error al obtener citas:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getMisCitas", error);
   }
 };
 
-/** Obtener próximas citas (cliente) */
 export const getProximasCitas = async (req, res) => {
   try {
     const citas = await citaModel.getProximasCitasByCliente(req.usuario.id);
-    res.json({ ok: true, citas, total: citas.length });
+    return ok(res, { citas, total: citas.length });
   } catch (error) {
-    console.error("Error al obtener próximas citas:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getProximasCitas", error);
   }
 };
 
-/** Obtener historial de citas (cliente) */
 export const getHistorialCitas = async (req, res) => {
   try {
-    let { limite = 10 } = req.query;
-    let limiteNum = parseInt(limite);
-    if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 10;
-    if (limiteNum > 100) limiteNum = 100;
-
+    let limite = parseInt(req.query.limite) || 10;
+    if (limite <= 0) limite = 10;
+    if (limite > 100) limite = 100;
     const citas = await citaModel.getHistorialCitasByCliente(
       req.usuario.id,
-      limiteNum,
+      limite,
     );
-    res.json({ ok: true, citas, total: citas.length, limite: limiteNum });
+    return ok(res, { citas, total: citas.length, limite });
   } catch (error) {
-    console.error("Error al obtener historial:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getHistorialCitas", error);
   }
 };
 
-/** Reagendar cita */
-export const reagendarCita = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { fecha, hora } = req.body;
-
-    if (!fecha || !hora) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Se requiere fecha y hora" });
-    }
-
-    const cita = await citaModel.getCitaById(id);
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    // Validar permisos
-    if (req.usuario.rol === "cliente" && cita.cliente_id !== req.usuario.id) {
-      return res.status(403).json({
-        ok: false,
-        message: "No tienes permiso para reagendar esta cita",
-      });
-    }
-
-    // Solo citas pendientes
-    if (cita.estado !== "pendiente") {
-      return res.status(400).json({
-        ok: false,
-        message: `No se puede reagendar una cita en estado "${cita.estado}"`,
-      });
-    }
-
-    // FIX: validar fecha Y hora (no solo fecha)
-    const errorFechaHora = validarFechaHoraFutura(fecha, hora);
-    if (errorFechaHora) {
-      return res.status(400).json(errorFechaHora);
-    }
-
-    // Verificar disponibilidad (excluye la misma cita)
-    const duplicado = await citaModel.verificarDuplicado(
-      cita.barbero_id,
-      fecha,
-      hora,
-    );
-    if (duplicado) {
-      return res.status(409).json({
-        ok: false,
-        message: "El barbero ya tiene una cita en ese horario",
-      });
-    }
-
-    const citaActualizada = await citaModel.updateCita(id, {
-      fecha,
-      hora,
-      notas: cita.notas,
-    });
-
-    await crearNotificacion(
-      cita.barbero_id,
-      "sistema",
-      "Cita reagendada",
-      `La cita de ${cita.cliente_nombre} ha sido reagendada para el ${fecha} a las ${hora}`,
-      { citaId: id },
-    );
-
-    res.json({
-      ok: true,
-      message: "Cita reagendada exitosamente",
-      cita: citaActualizada,
-    });
-  } catch (error) {
-    console.error("Error al reagendar cita:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-      error: error.message,
-    });
-  }
-};
-
-/** Cancelar cita */
-export const cancelarCita = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const cita = await citaModel.getCitaById(id);
-
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    if (req.usuario.rol === "cliente" && cita.cliente_id !== req.usuario.id) {
-      return res
-        .status(403)
-        .json({
-          ok: false,
-          message: "No tienes permiso para cancelar esta cita",
-        });
-    }
-    if (req.usuario.rol === "barbero" && cita.barbero_id !== req.usuario.id) {
-      return res
-        .status(403)
-        .json({
-          ok: false,
-          message: "No tienes permiso para cancelar esta cita",
-        });
-    }
-
-    const citaCancelada = await citaModel.cancelarCita(id);
-
-    if (req.usuario.rol === "cliente") {
-      await crearNotificacion(
-        cita.barbero_id,
-        "cita_cancelada",
-        "Cita cancelada por el cliente",
-        `${req.usuario.nombre} ha cancelado la cita del ${cita.fecha} a las ${cita.hora}`,
-        { citaId: id },
-      );
-    } else if (req.usuario.rol === "barbero") {
-      await crearNotificacion(
-        cita.cliente_id,
-        "cita_cancelada",
-        "Cita cancelada por el barbero",
-        `El barbero ha cancelado tu cita del ${cita.fecha} a las ${cita.hora}`,
-        { citaId: id },
-      );
-    }
-
-    res.json({
-      ok: true,
-      message: "Cita cancelada exitosamente",
-      cita: citaCancelada,
-    });
-  } catch (error) {
-    console.error("Error al cancelar cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
-  }
-};
-
-/** Obtener cita por ID */
 export const getCitaById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const cita = await citaModel.getCitaById(id);
-
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
+    const cita = await citaModel.getCitaById(req.params.id);
+    if (!cita) return notFound(res, "Cita no encontrada");
     if (req.usuario.rol === "cliente" && cita.cliente_id !== req.usuario.id) {
-      return res
-        .status(403)
-        .json({ ok: false, message: "No tienes permiso para ver esta cita" });
+      return forbidden(res, "No tienes permiso para ver esta cita");
     }
     if (req.usuario.rol === "barbero" && cita.barbero_id !== req.usuario.id) {
-      return res
-        .status(403)
-        .json({ ok: false, message: "No tienes permiso para ver esta cita" });
+      return forbidden(res, "No tienes permiso para ver esta cita");
     }
-
-    res.json({ ok: true, cita });
+    return ok(res, { cita });
   } catch (error) {
-    console.error("Error al obtener cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getCitaById", error);
   }
 };
 
-// FUNCIONES PARA BARBEROS/ADMIN
+export const reagendarCita = async (req, res) => {
+  try {
+    const { fecha, hora } = req.body;
+    if (!fecha || !hora) return badRequest(res, "Se requiere fecha y hora");
 
-/** Obtener agenda del día */
+    const resultado = await citaService.reagendarCita({
+      citaId: req.params.id,
+      fecha,
+      hora,
+      usuarioId: req.usuario.id,
+      usuarioRol: req.usuario.rol,
+    });
+
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Cita reagendada exitosamente", cita }),
+    );
+  } catch (error) {
+    return serverError(res, "reagendarCita", error);
+  }
+};
+
+export const cancelarCita = async (req, res) => {
+  try {
+    const resultado = await citaService.cancelarCita({
+      citaId: req.params.id,
+      usuarioId: req.usuario.id,
+      usuarioRol: req.usuario.rol,
+      usuarioNombre: req.usuario.nombre,
+    });
+
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Cita cancelada exitosamente", cita }),
+    );
+  } catch (error) {
+    return serverError(res, "cancelarCita", error);
+  }
+};
+
+// ─── BARBERO / ADMIN ────────────────────────────────────────────────────────
+
 export const getAgendaDia = async (req, res) => {
   try {
     const { fecha } = req.query;
-    let barbero_id = req.usuario.id;
-
-    if (req.usuario.rol === "admin" && req.query.barbero_id) {
-      barbero_id = req.query.barbero_id;
-    }
-
-    const citas = await citaModel.getAgendaDiaByBarbero(barbero_id, fecha);
-    res.json({
-      ok: true,
+    const barberoId =
+      req.usuario.rol === "admin" && req.query.barbero_id
+        ? req.query.barbero_id
+        : req.usuario.id;
+    const citas = await citaModel.getAgendaDiaByBarbero(barberoId, fecha);
+    return ok(res, {
       fecha: fecha || new Date().toISOString().split("T")[0],
       citas,
       total_citas: citas.length,
     });
   } catch (error) {
-    console.error("Error al obtener agenda del día:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getAgendaDia", error);
   }
 };
 
-/** Obtener resumen de citas por estado */
 export const getResumenCitas = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
@@ -405,275 +179,128 @@ export const getResumenCitas = async (req, res) => {
       fecha_inicio,
       fecha_fin,
     );
-    res.json({ ok: true, resumen });
+    return ok(res, { resumen });
   } catch (error) {
-    console.error("Error al obtener resumen:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getResumenCitas", error);
   }
 };
 
-/** Obtener agenda semanal */
 export const getAgendaSemana = async (req, res) => {
   try {
-    const { id: barbero_id } = req.params;
-    const { fecha_inicio } = req.query;
-    const fecha = fecha_inicio || new Date().toISOString().split("T")[0];
-
+    const { id: barberoId } = req.params;
+    const fecha =
+      req.query.fecha_inicio || new Date().toISOString().split("T")[0];
     if (
       req.usuario.rol === "barbero" &&
-      parseInt(barbero_id) !== req.usuario.id
+      parseInt(barberoId) !== req.usuario.id
     ) {
-      return res.status(403).json({
-        ok: false,
-        message: "No tienes permiso para ver la agenda de otro barbero",
-      });
+      return forbidden(
+        res,
+        "No tienes permiso para ver la agenda de otro barbero",
+      );
     }
-
-    const resultado = await citaModel.getCitasSemanaByBarbero(
-      barbero_id,
-      fecha,
-    );
-    res.json({
-      ok: true,
+    const resultado = await citaModel.getCitasSemanaByBarbero(barberoId, fecha);
+    return ok(res, {
       ...resultado,
       total_citas: Object.values(resultado.agenda).flat().length,
     });
   } catch (error) {
-    console.error("Error al obtener agenda semanal:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getAgendaSemana", error);
   }
 };
 
-/** Obtener citas de un barbero */
 export const getCitasBarbero = async (req, res) => {
   try {
     const { barbero_id } = req.params;
     const { fecha } = req.query;
-
-    if (req.usuario.rol === "admin" && !barbero_id) {
-      const filtros = {};
-      if (fecha) filtros.fecha = fecha;
-      const citas = await citaModel.getAllCitas(filtros);
-      return res.json({ ok: true, citas });
-    }
-
-    if (req.usuario.rol === "barbero") {
-      const citas = await citaModel.getCitasByBarbero(req.usuario.id, fecha);
-      return res.json({ ok: true, citas });
-    }
-
-    if (req.usuario.rol === "admin" && barbero_id) {
-      const citas = await citaModel.getCitasByBarbero(barbero_id, fecha);
-      return res.json({ ok: true, citas });
-    }
-
-    return res.status(400).json({ ok: false, message: "Parámetros inválidos" });
+    const id = req.usuario.rol === "barbero" ? req.usuario.id : barbero_id;
+    const citas = await citaModel.getCitasByBarbero(id, fecha);
+    return ok(res, { citas });
   } catch (error) {
-    console.error("Error al obtener citas del barbero:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getCitasBarbero", error);
   }
 };
 
-/** Obtener horarios disponibles */
 export const getHorariosDisponibles = async (req, res) => {
   try {
-    const { id: barbero_id } = req.params;
+    const { id: barberoId } = req.params;
     const { fecha } = req.query;
+    if (!fecha)
+      return badRequest(res, "Se requiere el parámetro fecha (YYYY-MM-DD)");
 
-    if (!fecha) {
-      return res.status(400).json({
-        ok: false,
-        message: "Se requiere el parámetro fecha (YYYY-MM-DD)",
-      });
-    }
-
-    const barbero = await getUserById(barbero_id);
-    if (!barbero || barbero.rol !== "barbero") {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Barbero no encontrado" });
-    }
-
-    const config = req.config || {};
-    const duracionSlot = parseInt(config.duracion_slot?.valor || 30);
-
-    const disponibles = await citaModel.getHorariosDisponibles(
-      barbero_id,
+    const duracionSlot = parseInt(req.config?.duracion_slot?.valor || 30);
+    const resultado = await citaService.getHorariosDisponibles({
+      barberoId,
       fecha,
       duracionSlot,
-    );
-
-    // FIX: si la fecha es hoy, filtrar slots que ya pasaron
-    let slotsFiltrados = disponibles;
-    const ahora = new Date();
-    const hoyStr = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, "0")}-${String(ahora.getDate()).padStart(2, "0")}`;
-
-    if (fecha === hoyStr) {
-      const horaActualStr = `${String(ahora.getHours()).padStart(2, "0")}:${String(ahora.getMinutes()).padStart(2, "0")}`;
-      slotsFiltrados = disponibles.filter((slot) => slot > horaActualStr);
-    }
-
-    res.json({
-      ok: true,
-      barbero_id,
-      fecha,
-      duracion_slot: duracionSlot,
-      horarios_disponibles: slotsFiltrados,
-      total_disponibles: slotsFiltrados.length,
     });
+
+    return manejarResultado(res, resultado, ({ horarios, barbero }) =>
+      ok(res, {
+        barbero_id: barberoId,
+        fecha,
+        duracion_slot: duracionSlot,
+        horarios_disponibles: horarios,
+        total_disponibles: horarios.length,
+      }),
+    );
   } catch (error) {
-    console.error("Error al obtener horarios disponibles:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getHorariosDisponibles", error);
   }
 };
 
-/** Actualizar estado de cita */
 export const actualizarEstadoCita = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { estado } = req.body;
-
-    const estadosPermitidos = [
-      "pendiente",
-      "confirmada",
-      "completada",
-      "cancelada",
-    ];
-    if (!estadosPermitidos.includes(estado)) {
-      return res.status(400).json({ ok: false, message: "Estado no válido" });
-    }
-
-    const cita = await citaModel.getCitaById(id);
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    // FIX: comparar como números para evitar fallo cuando barbero_id es int y req.usuario.id es string
-    if (
-      req.usuario.rol === "barbero" &&
-      parseInt(cita.barbero_id) !== parseInt(req.usuario.id)
-    ) {
-      return res.status(403).json({
-        ok: false,
-        message: "No tienes permiso para modificar esta cita",
-      });
-    }
-
-    const citaActualizada = await citaModel.updateCitaEstado(id, estado);
-    res.json({
-      ok: true,
-      message: "Estado de la cita actualizado",
-      cita: citaActualizada,
+    const resultado = await citaService.actualizarEstadoCita({
+      citaId: req.params.id,
+      estado: req.body.estado,
+      usuarioId: req.usuario.id,
+      usuarioRol: req.usuario.rol,
     });
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Estado de la cita actualizado", cita }),
+    );
   } catch (error) {
-    console.error("Error al actualizar cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "actualizarEstadoCita", error);
   }
 };
 
-/** Confirmar cita */
 export const confirmarCita = async (req, res) => {
   try {
-    const { id } = req.params;
-    const cita = await citaModel.getCitaById(id);
-
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    // FIX: comparación numérica para evitar mismatch int vs string
-    if (
-      req.usuario.rol === "barbero" &&
-      parseInt(cita.barbero_id) !== parseInt(req.usuario.id)
-    ) {
-      return res.status(403).json({
-        ok: false,
-        message: "No tienes permiso para confirmar esta cita",
-      });
-    }
-
-    if (cita.estado !== "pendiente") {
-      return res.status(400).json({
-        ok: false,
-        message: `No se puede confirmar una cita en estado "${cita.estado}"`,
-      });
-    }
-
-    const citaConfirmada = await citaModel.updateCitaEstado(id, "confirmada");
-
-    await crearNotificacion(
-      cita.cliente_id,
-      "cita_confirmada",
-      "Cita confirmada",
-      `Tu cita del ${cita.fecha} a las ${cita.hora} ha sido confirmada por el barbero`,
-      { citaId: id },
-    );
-
-    res.json({
-      ok: true,
-      message: "Cita confirmada exitosamente",
-      cita: citaConfirmada,
+    const resultado = await citaService.confirmarCita({
+      citaId: req.params.id,
+      usuarioId: req.usuario.id,
+      usuarioRol: req.usuario.rol,
     });
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Cita confirmada exitosamente", cita }),
+    );
   } catch (error) {
-    console.error("Error al confirmar cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "confirmarCita", error);
   }
 };
 
-/** Finalizar cita */
 export const finalizarCita = async (req, res) => {
   try {
-    const { id } = req.params;
-    const cita = await citaModel.getCitaById(id);
-
-    if (!cita) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    // FIX: comparación numérica
-    if (
-      req.usuario.rol === "barbero" &&
-      parseInt(cita.barbero_id) !== parseInt(req.usuario.id)
-    ) {
-      return res.status(403).json({
-        ok: false,
-        message: "No tienes permiso para finalizar esta cita",
-      });
-    }
-
-    const citaFinalizada = await citaModel.updateCitaEstado(id, "completada");
-
-    await crearNotificacion(
-      cita.cliente_id,
-      "sistema",
-      "✨ Cita completada",
-      `Tu cita del ${cita.fecha} ha sido marcada como completada. ¡Gracias por visitarnos!`,
-      { citaId: id },
-    );
-
-    res.json({
-      ok: true,
-      message: "Cita finalizada exitosamente",
-      cita: citaFinalizada,
+    const resultado = await citaService.finalizarCita({
+      citaId: req.params.id,
+      usuarioId: req.usuario.id,
+      usuarioRol: req.usuario.rol,
     });
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Cita finalizada exitosamente", cita }),
+    );
   } catch (error) {
-    console.error("Error al finalizar cita:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "finalizarCita", error);
   }
 };
 
-/** Verificar disponibilidad puntual */
 export const verificarDisponibilidad = async (req, res) => {
   try {
     const { barbero_id, fecha, hora } = req.query;
-
     if (!barbero_id || !fecha || !hora) {
-      return res.status(400).json({
-        ok: false,
-        message: "Se requiere barbero_id, fecha y hora",
-      });
+      return badRequest(res, "Se requiere barbero_id, fecha y hora");
     }
-
     const disponible = await citaModel.verificarDisponibilidad(
       barbero_id,
       fecha,
@@ -683,246 +310,113 @@ export const verificarDisponibilidad = async (req, res) => {
       barbero_id,
       fecha,
     );
-
-    res.json({ ok: true, disponible, horarios_ocupados: horariosOcupados });
+    return ok(res, { disponible, horarios_ocupados: horariosOcupados });
   } catch (error) {
-    console.error("Error al verificar disponibilidad:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "verificarDisponibilidad", error);
   }
 };
 
-// FUNCIONES PARA ADMIN
+// ─── ADMIN ──────────────────────────────────────────────────────────────────
 
-/** Crear cita como administrador */
 export const crearCitaAdmin = async (req, res) => {
   try {
-    const pool = getPool();
-    const {
-      cliente_id,
-      barbero_id,
-      servicio_id,
+    const { cliente_id, barbero_id, servicio_id, fecha, hora, notas } =
+      req.body;
+    if (!cliente_id || !barbero_id || !servicio_id || !fecha || !hora) {
+      return badRequest(
+        res,
+        "Todos los campos son requeridos: cliente_id, barbero_id, servicio_id, fecha, hora",
+      );
+    }
+
+    const resultado = await citaService.crearCitaAdmin({
+      clienteId: parseInt(cliente_id),
+      barberoId: parseInt(barbero_id),
+      servicioId: parseInt(servicio_id),
       fecha,
       hora,
-      notas = null,
-    } = req.body;
-
-    if (!cliente_id || !barbero_id || !servicio_id || !fecha || !hora) {
-      return res.status(400).json({
-        ok: false,
-        message:
-          "Todos los campos son requeridos: cliente_id, barbero_id, servicio_id, fecha, hora",
-      });
-    }
-
-    const clienteId = parseInt(cliente_id);
-    const barberoId = parseInt(barbero_id);
-    const servicioId = parseInt(servicio_id);
-
-    if (isNaN(clienteId) || isNaN(barberoId) || isNaN(servicioId)) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Los IDs deben ser números válidos" });
-    }
-
-    const [cliente] = await pool.execute(
-      "SELECT id, nombre, email FROM usuarios WHERE id = ? AND rol = 'cliente'",
-      [clienteId],
-    );
-    if (cliente.length === 0) {
-      return res
-        .status(404)
-        .json({
-          ok: false,
-          message: "Cliente no encontrado o no es un cliente válido",
-        });
-    }
-
-    const [barbero] = await pool.execute(
-      "SELECT id, nombre FROM usuarios WHERE id = ? AND rol = 'barbero'",
-      [barberoId],
-    );
-    if (barbero.length === 0) {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Barbero no encontrado" });
-    }
-
-    const [servicio] = await pool.execute(
-      "SELECT id, nombre, duracion, precio FROM servicios WHERE id = ? AND activo = TRUE",
-      [servicioId],
-    );
-    if (servicio.length === 0) {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Servicio no encontrado o inactivo" });
-    }
-
-    // FIX: validar fecha Y hora (no solo fecha)
-    const errorFechaHora = validarFechaHoraFutura(fecha, hora);
-    if (errorFechaHora) {
-      return res.status(400).json(errorFechaHora);
-    }
-
-    const [horarioOcupado] = await pool.execute(
-      `SELECT id FROM citas 
-       WHERE barbero_id = ? AND fecha = ? AND hora = ? 
-       AND estado NOT IN ('cancelada')`,
-      [barberoId, fecha, hora],
-    );
-    if (horarioOcupado.length > 0) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          message: "El horario seleccionado no está disponible",
-        });
-    }
-
-    const [result] = await pool.execute(
-      `INSERT INTO citas (cliente_id, barbero_id, servicio_id, fecha, hora, estado, notas, created_at)
-       VALUES (?, ?, ?, ?, ?, 'confirmada', ?, NOW())`,
-      [clienteId, barberoId, servicioId, fecha, hora, notas],
-    );
-
-    await crearNotificacion(
-      clienteId,
-      "cita_nueva",
-      "Cita agendada por administrador",
-      `El administrador agendó tu cita de ${servicio[0].nombre} el ${fecha} a las ${hora} con ${barbero[0].nombre}`,
-      { citaId: result.insertId },
-    );
-
-    await crearNotificacion(
-      barberoId,
-      "cita_nueva",
-      "Nueva cita asignada",
-      `Se te ha asignado una nueva cita de ${cliente[0].nombre} el ${fecha} a las ${hora} - ${servicio[0].nombre}`,
-      { citaId: result.insertId },
-    );
-
-    const [citaCreada] = await pool.execute(
-      `SELECT 
-        c.id, c.fecha, c.hora, c.estado, c.notas, c.created_at,
-        s.id as servicio_id, s.nombre as servicio_nombre, s.duracion, s.precio,
-        u.id as cliente_id, u.nombre as cliente_nombre, u.email as cliente_email,
-        b.id as barbero_id, b.nombre as barbero_nombre
-       FROM citas c
-       INNER JOIN servicios s ON c.servicio_id = s.id
-       INNER JOIN usuarios u ON c.cliente_id = u.id
-       INNER JOIN usuarios b ON c.barbero_id = b.id
-       WHERE c.id = ?`,
-      [result.insertId],
-    );
-
-    res.status(201).json({
-      ok: true,
-      message: "Cita creada exitosamente por el administrador",
-      cita: citaCreada[0],
+      notas,
     });
+
+    return manejarResultado(res, resultado, ({ cita }) =>
+      created(res, {
+        message: "Cita creada exitosamente por el administrador",
+        cita,
+      }),
+    );
   } catch (error) {
-    console.error("Error al crear cita como admin:", error);
-    res
-      .status(500)
-      .json({
-        ok: false,
-        message: "Error interno del servidor",
-        error: error.message,
-      });
+    return serverError(res, "crearCitaAdmin", error);
   }
 };
 
-/** Obtener todas las citas (admin) con paginación y filtros */
 export const getAllCitas = async (req, res) => {
   try {
     const { estado, fecha_desde, fecha_hasta } = req.query;
+    let page = parseInt(req.query.page) || 1;
+    let limit = parseInt(req.query.limit) || 15;
+    if (page <= 0) page = 1;
+    if (limit <= 0 || limit > 100) limit = 15;
 
-    let pageNum = parseInt(req.query.page, 10);
-    let limitNum = parseInt(req.query.limit, 10);
-
-    if (isNaN(pageNum) || pageNum <= 0) pageNum = 1;
-    if (isNaN(limitNum) || limitNum <= 0) limitNum = 15;
-    if (limitNum > 100) limitNum = 100;
-
-    const offset = (pageNum - 1) * limitNum;
+    const { getPool } = await import("../config/db.js");
     const pool = getPool();
+    const offset = (page - 1) * limit;
 
-    let whereClause = "";
-    const whereParams = [];
-
-    if (estado && estado.trim() !== "") {
-      whereClause += " AND c.estado = ?";
-      whereParams.push(estado);
+    let where = "";
+    const params = [];
+    if (estado) {
+      where += " AND c.estado = ?";
+      params.push(estado);
     }
-    if (fecha_desde && fecha_desde.trim() !== "") {
-      whereClause += " AND c.fecha >= ?";
-      whereParams.push(fecha_desde);
+    if (fecha_desde) {
+      where += " AND c.fecha >= ?";
+      params.push(fecha_desde);
     }
-    if (fecha_hasta && fecha_hasta.trim() !== "") {
-      whereClause += " AND c.fecha <= ?";
-      whereParams.push(fecha_hasta);
+    if (fecha_hasta) {
+      where += " AND c.fecha <= ?";
+      params.push(fecha_hasta);
     }
 
-    const query = `
-      SELECT 
-        c.id, c.fecha, c.hora, c.estado, c.notas, c.created_at, c.updated_at,
-        cli.id as cliente_id, cli.nombre as cliente_nombre, cli.email as cliente_email,
-        bar.id as barbero_id, bar.nombre as barbero_nombre,
-        s.id as servicio_id, s.nombre as servicio_nombre, s.duracion, s.precio
-      FROM citas c
-      LEFT JOIN usuarios cli ON c.cliente_id = cli.id
-      LEFT JOIN usuarios bar ON c.barbero_id = bar.id
-      LEFT JOIN servicios s ON c.servicio_id = s.id
-      WHERE 1=1 ${whereClause}
-      ORDER BY c.fecha DESC, c.hora DESC
-      LIMIT ${limitNum} OFFSET ${offset}
-    `;
-
-    const [rows] = await pool.execute(query, whereParams);
-    const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM citas c WHERE 1=1 ${whereClause}`,
-      whereParams,
+    const [rows] = await pool.execute(
+      `SELECT c.id, c.fecha, c.hora, c.estado, c.notas, c.created_at, c.updated_at,
+              cli.id as cliente_id, cli.nombre as cliente_nombre, cli.email as cliente_email,
+              bar.id as barbero_id, bar.nombre as barbero_nombre,
+              s.id as servicio_id, s.nombre as servicio_nombre, s.duracion, s.precio
+       FROM citas c
+       LEFT JOIN usuarios cli ON c.cliente_id = cli.id
+       LEFT JOIN usuarios bar ON c.barbero_id = bar.id
+       LEFT JOIN servicios s ON c.servicio_id = s.id
+       WHERE 1=1 ${where}
+       ORDER BY c.fecha DESC, c.hora DESC
+       LIMIT ${limit} OFFSET ${offset}`,
+      params,
     );
 
-    const total = countResult[0].total;
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM citas c WHERE 1=1 ${where}`,
+      params,
+    );
 
-    return res.json({
-      ok: true,
+    return ok(res, {
       citas: rows,
-      total,
-      page: pageNum,
-      totalPages: Math.ceil(total / limitNum),
-      limit: limitNum,
+      total: countResult[0].total,
+      page,
+      totalPages: Math.ceil(countResult[0].total / limit),
+      limit,
     });
   } catch (error) {
-    console.error("Error al obtener todas las citas:", error);
-    return res
-      .status(500)
-      .json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getAllCitas", error);
   }
 };
 
-/** Dashboard estadísticas */
 export const getDashboard = async (req, res) => {
   try {
     const stats = await citaModel.getDashboardStats();
-    res.json({
-      ok: true,
-      dashboard: {
-        citas_hoy: stats.citas_hoy,
-        citas_pendientes: stats.citas_pendientes,
-        ingresos_mes: stats.ingresos_mes,
-        clientes_totales: stats.clientes_totales,
-        barberos_activos: stats.barberos_activos,
-        tasa_ocupacion: stats.tasa_ocupacion,
-      },
-    });
+    return ok(res, { dashboard: stats });
   } catch (error) {
-    console.error("Error al obtener dashboard:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getDashboard", error);
   }
 };
 
-/** Distribución horaria */
 export const getDistribucionHoraria = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
@@ -930,80 +424,62 @@ export const getDistribucionHoraria = async (req, res) => {
       fecha_inicio,
       fecha_fin,
     );
-    res.json({ ok: true, distribucion });
+    return ok(res, { distribucion });
   } catch (error) {
-    console.error("Error al obtener distribución horaria:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getDistribucionHoraria", error);
   }
 };
 
-/** Reporte de ingresos */
 export const getReporteIngresos = async (req, res) => {
   try {
     const { periodo = "mes", fecha_inicio, fecha_fin } = req.query;
-    const periodosValidos = ["dia", "mes", "año"];
-
-    if (!periodosValidos.includes(periodo)) {
-      return res.status(400).json({
-        ok: false,
-        message: `Período no válido. Use: ${periodosValidos.join(", ")}`,
-      });
+    if (!["dia", "mes", "año"].includes(periodo)) {
+      return badRequest(res, "Período no válido. Use: dia, mes, año");
     }
     if (!fecha_inicio || !fecha_fin) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Se requiere fecha_inicio y fecha_fin" });
+      return badRequest(res, "Se requiere fecha_inicio y fecha_fin");
     }
-
     const reporte = await citaModel.getReporteIngresos(
       periodo,
       fecha_inicio,
       fecha_fin,
     );
-    res.json({ ok: true, periodo, fecha_inicio, fecha_fin, reporte });
+    return ok(res, { periodo, fecha_inicio, fecha_fin, reporte });
   } catch (error) {
-    console.error("Error al generar reporte de ingresos:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getReporteIngresos", error);
   }
 };
 
-/** Servicios más solicitados */
 export const getServiciosTop = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, limite = 5 } = req.query;
-    let limiteNum = parseInt(limite);
-    if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 5;
+    const limiteNum = Math.min(Math.max(parseInt(limite) || 5, 1), 50);
     const servicios = await citaModel.getServiciosMasSolicitados(
       fecha_inicio,
       fecha_fin,
       limiteNum,
     );
-    res.json({ ok: true, servicios });
+    return ok(res, { servicios });
   } catch (error) {
-    console.error("Error al obtener servicios top:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getServiciosTop", error);
   }
 };
 
-/** Clientes más frecuentes */
 export const getClientesTop = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, limite = 10 } = req.query;
-    let limiteNum = parseInt(limite);
-    if (isNaN(limiteNum) || limiteNum <= 0) limiteNum = 10;
+    const limiteNum = Math.min(Math.max(parseInt(limite) || 10, 1), 100);
     const clientes = await citaModel.getClientesMasFrecuentes(
       fecha_inicio,
       fecha_fin,
       limiteNum,
     );
-    res.json({ ok: true, clientes });
+    return ok(res, { clientes });
   } catch (error) {
-    console.error("Error al obtener clientes top:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getClientesTop", error);
   }
 };
 
-/** Tasa de cancelación */
 export const getTasaCancelacion = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
@@ -1011,185 +487,23 @@ export const getTasaCancelacion = async (req, res) => {
       fecha_inicio,
       fecha_fin,
     );
-    res.json({ ok: true, reporte });
+    return ok(res, { reporte });
   } catch (error) {
-    console.error("Error al obtener tasa de cancelación:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "getTasaCancelacion", error);
   }
 };
 
-/** Editar cita completa (admin) */
 export const editarCitaAdmin = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { fecha, hora, barbero_id, servicio_id, notas, estado } = req.body;
-    const pool = getPool();
-
-    const [citaExistente] = await pool.execute(
-      `SELECT c.*, u.nombre as cliente_nombre, u.email as cliente_email 
-       FROM citas c LEFT JOIN usuarios u ON c.cliente_id = u.id WHERE c.id = ?`,
-      [id],
-    );
-    if (!citaExistente[0]) {
-      return res.status(404).json({ ok: false, message: "Cita no encontrada" });
-    }
-
-    const citaOriginal = citaExistente[0];
-
-    // FIX: validar fecha Y hora cuando se cambian
-    if (fecha || hora) {
-      const fechaEfectiva = fecha || citaOriginal.fecha;
-      const horaEfectiva = hora || citaOriginal.hora;
-      const errorFechaHora = validarFechaHoraFutura(
-        fechaEfectiva,
-        horaEfectiva,
-      );
-      if (errorFechaHora) {
-        return res.status(400).json(errorFechaHora);
-      }
-    }
-
-    if (
-      (barbero_id && barbero_id !== citaOriginal.barbero_id) ||
-      (fecha && fecha !== citaOriginal.fecha) ||
-      (hora && hora !== citaOriginal.hora)
-    ) {
-      const [duplicado] = await pool.execute(
-        "SELECT id FROM citas WHERE barbero_id = ? AND fecha = ? AND hora = ? AND id != ? AND estado NOT IN ('cancelada')",
-        [
-          barbero_id || citaOriginal.barbero_id,
-          fecha || citaOriginal.fecha,
-          hora || citaOriginal.hora,
-          id,
-        ],
-      );
-      if (duplicado.length > 0) {
-        return res
-          .status(409)
-          .json({
-            ok: false,
-            message: "El barbero ya tiene una cita en ese horario",
-          });
-      }
-    }
-
-    let updates = [];
-    let params = [];
-
-    if (fecha !== undefined) {
-      updates.push("fecha = ?");
-      params.push(fecha);
-    }
-    if (hora !== undefined) {
-      updates.push("hora = ?");
-      params.push(hora);
-    }
-    if (barbero_id !== undefined) {
-      updates.push("barbero_id = ?");
-      params.push(barbero_id);
-    }
-    if (servicio_id !== undefined) {
-      updates.push("servicio_id = ?");
-      params.push(servicio_id);
-    }
-    if (notas !== undefined) {
-      updates.push("notas = ?");
-      params.push(notas || null);
-    }
-    if (estado !== undefined && estado !== citaOriginal.estado) {
-      updates.push("estado = ?");
-      params.push(estado);
-    }
-
-    if (updates.length === 0) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "No hay campos para actualizar" });
-    }
-
-    updates.push("updated_at = NOW()");
-    params.push(id);
-
-    await pool.execute(
-      `UPDATE citas SET ${updates.join(", ")} WHERE id = ?`,
-      params,
-    );
-
-    const cambiosImportantes =
-      fecha !== undefined ||
-      hora !== undefined ||
-      barbero_id !== undefined ||
-      estado !== undefined;
-
-    if (cambiosImportantes && citaOriginal.cliente_id) {
-      let mensaje = "";
-      if (fecha || hora) {
-        const nuevaFecha = fecha || citaOriginal.fecha;
-        const nuevaHora = hora || citaOriginal.hora;
-        mensaje = `Tu cita ha sido modificada. Nueva fecha: ${nuevaFecha} a las ${String(nuevaHora).substring(0, 5)}`;
-      } else if (barbero_id) {
-        const [barberoNuevo] = await pool.execute(
-          "SELECT nombre FROM usuarios WHERE id = ?",
-          [barbero_id],
-        );
-        mensaje = `Tu cita ha sido modificada. Nuevo barbero: ${barberoNuevo[0]?.nombre || "asignado"}`;
-      } else if (estado) {
-        mensaje = `El estado de tu cita ha cambiado a: ${estado}`;
-      }
-
-      if (mensaje) {
-        await crearNotificacion(
-          citaOriginal.cliente_id,
-          "cita_editada_admin",
-          "Tu cita fue modificada",
-          mensaje,
-          { citaId: id, cambios: { fecha, hora, barbero_id, estado } },
-        );
-      }
-    }
-
-    if (barbero_id !== undefined && barbero_id !== citaOriginal.barbero_id) {
-      if (citaOriginal.barbero_id) {
-        await crearNotificacion(
-          citaOriginal.barbero_id,
-          "cita_editada_admin",
-          "Cita reasignada",
-          `La cita #${id} ya no está asignada a ti`,
-          { citaId: id },
-        );
-      }
-      if (barbero_id) {
-        await crearNotificacion(
-          barbero_id,
-          "cita_editada_admin",
-          "Nueva cita asignada",
-          `Se te ha asignado una cita para el ${fecha || citaOriginal.fecha} a las ${String(hora || citaOriginal.hora).substring(0, 5)}`,
-          { citaId: id },
-        );
-      }
-    }
-
-    const [citaActualizada] = await pool.execute(
-      `SELECT c.*, 
-              u.nombre as cliente_nombre, u.email as cliente_email,
-              b.nombre as barbero_nombre,
-              s.nombre as servicio_nombre, s.duracion, s.precio
-       FROM citas c
-       LEFT JOIN usuarios u ON c.cliente_id = u.id
-       LEFT JOIN usuarios b ON c.barbero_id = b.id
-       LEFT JOIN servicios s ON c.servicio_id = s.id
-       WHERE c.id = ?`,
-      [id],
-    );
-
-    res.json({
-      ok: true,
-      message: "Cita actualizada exitosamente",
-      cita: citaActualizada[0],
+    const resultado = await citaService.editarCitaAdmin({
+      citaId: req.params.id,
+      campos: req.body,
     });
+    return manejarResultado(res, resultado, ({ cita }) =>
+      ok(res, { message: "Cita actualizada exitosamente", cita }),
+    );
   } catch (error) {
-    console.error("Error al editar cita como admin:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    return serverError(res, "editarCitaAdmin", error);
   }
 };
 
