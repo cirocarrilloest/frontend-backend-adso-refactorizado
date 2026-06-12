@@ -17,7 +17,7 @@ export const userRepository = {
     const pool = getPool();
     const [rows] = await pool.execute(
       `SELECT id, nombre, email, pass, rol, telefono, created_at, updated_at
-     FROM usuarios WHERE id = ?`,
+       FROM usuarios WHERE id = ?`,
       [id],
     );
     return rows[0] || null;
@@ -113,7 +113,8 @@ export const userRepository = {
   async getHorarioBarbero(barberoId) {
     const pool = getPool();
     const [rows] = await pool.execute(
-      `SELECT * FROM horarios_barbero WHERE barbero_id = ? AND activo = TRUE ORDER BY dia_semana`,
+      `SELECT * FROM horarios_barbero WHERE barbero_id = ? AND activo = TRUE 
+       ORDER BY FIELD(dia_semana, 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo')`,
       [barberoId],
     );
     return rows;
@@ -121,13 +122,21 @@ export const userRepository = {
 
   async setHorarioBarbero(barberoId, { dia_semana, hora_inicio, hora_fin }) {
     const pool = getPool();
+
+    // Validar que hora_inicio < hora_fin
+    if (hora_inicio >= hora_fin) {
+      throw new Error("La hora de inicio debe ser menor que la hora de fin");
+    }
+
     const [existing] = await pool.execute(
       `SELECT id FROM horarios_barbero WHERE barbero_id = ? AND dia_semana = ?`,
       [barberoId, dia_semana],
     );
+
     if (existing.length > 0) {
       await pool.execute(
-        `UPDATE horarios_barbero SET hora_inicio = ?, hora_fin = ?, activo = TRUE WHERE barbero_id = ? AND dia_semana = ?`,
+        `UPDATE horarios_barbero SET hora_inicio = ?, hora_fin = ?, activo = TRUE 
+         WHERE barbero_id = ? AND dia_semana = ?`,
         [hora_inicio, hora_fin, barberoId, dia_semana],
       );
     } else {
