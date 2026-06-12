@@ -204,46 +204,50 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
   );
 }
 
-function StatsBar({ citas, formatearPrecio }) {
-  const cnt = citas.reduce((a, c) => {
-    a[c.estado] = (a[c.estado] || 0) + 1;
-    return a;
-  }, {});
-  const ingresos = citas
-    .filter((c) => c.estado === "completada")
-    .reduce((s, c) => s + Number(c.precio || 0), 0);
+// ✅ NUEVO: StatsBar que recibe estadisticas del backend
+function StatsBar({ estadisticas, formatearPrecio }) {
   const items = [
-    { label: "Total", val: citas.length, cls: "text-gray-900 dark:text-white" },
+    {
+      label: "Total",
+      val: estadisticas?.total_citas || 0,
+      cls: "text-gray-900 dark:text-white",
+    },
     {
       label: "Pendientes",
-      val: cnt.pendiente || 0,
+      val: estadisticas?.pendientes || 0,
       cls: "text-amber-600 dark:text-amber-400",
     },
     {
       label: "Confirmadas",
-      val: cnt.confirmada || 0,
+      val: estadisticas?.confirmadas || 0,
       cls: "text-blue-600 dark:text-blue-400",
     },
     {
       label: "Completadas",
-      val: cnt.completada || 0,
+      val: estadisticas?.completadas || 0,
       cls: "text-green-600 dark:text-green-400",
     },
     {
+      label: "Canceladas",
+      val: estadisticas?.canceladas || 0,
+      cls: "text-gray-500 dark:text-gray-500",
+    },
+    {
       label: "Ingresos",
-      val: formatearPrecio(ingresos),
+      val: formatearPrecio(estadisticas?.ingresos_totales || 0),
       cls: "text-green-700 dark:text-green-300",
     },
   ];
+
   return (
-    <div className="grid grid-cols-5 gap-2">
+    <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
       {items.map((s) => (
         <div
           key={s.label}
           className="bg-white dark:bg-gray-800 rounded-xl p-3 text-center border border-gray-100 dark:border-white/5 shadow-sm"
         >
           <p className={`text-lg font-bold leading-tight ${s.cls}`}>{s.val}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
+          <p className="text-xs text-gray-400 mt-1">{s.label}</p>
         </div>
       ))}
     </div>
@@ -260,6 +264,9 @@ export default function VistaCitasAdmin() {
   const [busqueda, setBusqueda] = useState("");
   const [mostrarDisponibilidad, setMostrarDisponibilidad] = useState(false);
   const [citas, setCitas] = useState([]);
+  // ✅ NUEVOS ESTADOS
+  const [estadisticas, setEstadisticas] = useState(null);
+  const [resumen, setResumen] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [ordenCol, setOrdenCol] = useState("fecha");
@@ -281,13 +288,28 @@ export default function VistaCitasAdmin() {
     })();
   }, []);
 
+  // ✅ NUEVA FUNCIÓN CARGAR con estadísticas
   const cargar = useCallback(async () => {
     if (!barberoId) return;
     setLoading(true);
     setError(null);
     try {
       const r = await getCitasBarbero(barberoId, fechaFiltro || null);
+
+      // ✅ AHORA recibimos estadísticas completas del backend
       setCitas(r.citas || []);
+      setEstadisticas(
+        r.estadisticas || {
+          total_citas: 0,
+          pendientes: 0,
+          confirmadas: 0,
+          completadas: 0,
+          canceladas: 0,
+          ingresos_totales: 0,
+          tasa_exito: 0,
+        },
+      );
+      setResumen(r.resumen || null);
     } catch (e) {
       setError(
         e.response?.data?.message || e.message || "Error al cargar citas",
@@ -475,7 +497,13 @@ export default function VistaCitasAdmin() {
 
         {!loading && !error && barberoId && (
           <>
-            <StatsBar citas={citas} formatearPrecio={formatearPrecio} />
+            {/* ✅ NUEVO: StatsBar con estadisticas del backend */}
+            {estadisticas && (
+              <StatsBar
+                estadisticas={estadisticas}
+                formatearPrecio={formatearPrecio}
+              />
+            )}
             <button
               onClick={() => setMostrarDisponibilidad((v) => !v)}
               className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
