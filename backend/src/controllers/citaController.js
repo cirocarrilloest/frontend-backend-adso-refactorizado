@@ -502,7 +502,7 @@ export const getAllCitas = async (req, res, next) => {
   }
 };
 
-// ============ DASHBOARD ADMIN (CORREGIDO) ============
+// ============ DASHBOARD ADMIN ============
 
 /**
  * Obtener dashboard completo para admin
@@ -539,7 +539,6 @@ export const getDashboard = async (req, res, next) => {
 
 /**
  * Función interna para obtener servicios top
- * CORREGIDO: LIMIT con template string para evitar error de MySQL
  */
 async function getServiciosTopInternal(req) {
   try {
@@ -596,7 +595,6 @@ async function getServiciosTopInternal(req) {
 
 /**
  * Función interna para obtener clientes top
- * CORREGIDO: LIMIT con template string para evitar error de MySQL
  */
 async function getClientesTopInternal(req) {
   try {
@@ -659,10 +657,21 @@ async function getClientesTopInternal(req) {
 
 // ============ ENDPOINTS PÚBLICOS DE REPORTES ============
 
+/**
+ * OBTENER DISTRIBUCIÓN HORARIA DE CITAS
+ * GET /api/citas/distribucion-horaria
+ *
+ * @param {string} fecha_inicio - Fecha inicio (YYYY-MM-DD)
+ * @param {string} fecha_fin - Fecha fin (YYYY-MM-DD)
+ * @param {number} barbero_id - (Opcional) Filtrar por barbero específico
+ *
+ * Devuelve distribución SOLO dentro del horario laboral de cada barbero
+ */
 export const getDistribucionHoraria = async (req, res, next) => {
   try {
-    let { fecha_inicio, fecha_fin } = req.query;
+    let { fecha_inicio, fecha_fin, barbero_id } = req.query;
 
+    // Validar fechas
     if (
       !fecha_inicio ||
       fecha_inicio === "null" ||
@@ -684,21 +693,149 @@ export const getDistribucionHoraria = async (req, res, next) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.execute(
-      `SELECT HOUR(hora) as hora, 
-              COUNT(*) as total_citas,
-              SUM(CASE WHEN estado = 'completada' THEN 1 ELSE 0 END) as completadas,
-              SUM(CASE WHEN estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas
-       FROM citas
-       WHERE fecha BETWEEN ? AND ?
-         AND estado != 'pendiente'
-       GROUP BY HOUR(hora)
-       ORDER BY hora ASC`,
-      [fecha_inicio, fecha_fin],
+
+    // Si se especifica un barbero, usar su horario individual
+    if (barbero_id) {
+      // ✅ CORREGIDO: Eliminar 'activo = TRUE' (no existe en usuarios)
+      const [horarioBarbero] = await pool.execute(
+        `SELECT hora_inicio, hora_fin FROM horarios_barbero 
+         WHERE barbero_id = ? AND activo = TRUE 
+         ORDER BY FIELD(dia_semana, 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo')
+         LIMIT 1`,
+        [barbero_id],
+      );
+
+      const horaInicio = horarioBarbero[0]?.hora_inicio || "09:00";
+      const horaFin = horarioBarbero[0]?.hora_fin || "20:00";
+      const horaInicioNum = parseInt(horaInicio.split(":")[0]);
+      const horaFinNum = parseInt(horaFin.split(":")[0]);
+
+      // Generar solo horas dentro del horario laboral del barbero
+      const horas = [];
+      for (let h = horaInicioNum; h < horaFinNum; h++) {
+        horas.push(h);
+      }
+
+      if (horas.length === 0) {
+        return ok(res, {
+          distribucion: [],
+          mensaje: "No hay horas laborales configuradas para este barbero",
+        });
+      }
+
+      // Consultar citas del barbero específico en el rango de fechas
+      const [rows] = await pool.execute(
+        `SELECT HOUR(c.hora) as hora, 
+                COUNT(*) as total_citas,
+                SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as completadas,
+                SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas
+         FROM citas c
+         WHERE c.barbero_id = ?
+           AND c.fecha BETWEEN ? AND ?
+           AND c.estado IN ('completada', 'confirmada')
+           AND HOUR(c.hora) BETWEEN ? AND ?
+         GROUP BY HOUR(c.hora)
+         ORDER BY hora ASC`,
+        [barbero_id, fecha_inicio, fecha_fin, horaInicioNum, horaFinNum - 1],
+      );
+
+      // Crear mapa de resultados
+      const resultadosMap = new Map();
+      for (const row of rows) {
+        resultadosMap.set(row.hora, row);
+      }
+
+      // Construir array con todas las horas del rango laboral
+      const distribucionCompleta = horas.map((hora) => ({
+        hora: hora,
+        total_citas: resultadosMap.get(hora)?.total_citas || 0,
+        completadas: resultadosMap.get(hora)?.completadas || 0,
+        canceladas: resultadosMap.get(hora)?.canceladas || 0,
+        horario_barbero: `${horaInicio} - ${horaFin}`,
+      }));
+
+      return ok(res, {
+        distribucion: distribucionCompleta,
+        barbero_id: parseInt(barbero_id),
+        rango_horario: `${horaInicio} - ${horaFin}`,
+        periodo: { fecha_inicio, fecha_fin },
+      });
+    }
+
+    // ✅ CORREGIDO: Eliminar 'activo = TRUE' de la tabla usuarios (no existe)
+    const [barberos] = await pool.execute(
+      `SELECT id, nombre FROM usuarios WHERE rol = 'barbero'`,
     );
 
-    return ok(res, { distribucion: rows });
+    if (barberos.length === 0) {
+      return ok(res, { distribucion: [], mensaje: "No hay barberos" });
+    }
+
+    // Para cada barbero, obtener su rango horario mínimo y máximo
+    const rangosHorarios = [];
+    for (const barbero of barberos) {
+      const [horario] = await pool.execute(
+        `SELECT MIN(HOUR(hora_inicio)) as min_hora, MAX(HOUR(hora_fin)) as max_hora 
+         FROM horarios_barbero 
+         WHERE barbero_id = ? AND activo = TRUE`,
+        [barbero.id],
+      );
+      if (horario[0]?.min_hora) {
+        rangosHorarios.push({
+          barbero_id: barbero.id,
+          min_hora: horario[0].min_hora,
+          max_hora: horario[0].max_hora,
+        });
+      }
+    }
+
+    // Calcular hora mínima y máxima global
+    const horaGlobalMin = Math.min(...rangosHorarios.map((r) => r.min_hora), 8);
+    const horaGlobalMax = Math.max(
+      ...rangosHorarios.map((r) => r.max_hora),
+      20,
+    );
+
+    // Consultar todas las citas en el rango
+    const [rows] = await pool.execute(
+      `SELECT HOUR(c.hora) as hora, 
+              COUNT(*) as total_citas,
+              SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) as completadas,
+              SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas
+       FROM citas c
+       WHERE c.fecha BETWEEN ? AND ?
+         AND c.estado IN ('completada', 'confirmada')
+         AND HOUR(c.hora) BETWEEN ? AND ?
+       GROUP BY HOUR(c.hora)
+       ORDER BY hora ASC`,
+      [fecha_inicio, fecha_fin, horaGlobalMin, horaGlobalMax - 1],
+    );
+
+    // Crear mapa de resultados
+    const resultadosMap = new Map();
+    for (const row of rows) {
+      resultadosMap.set(row.hora, row);
+    }
+
+    // Construir array con todas las horas del rango global
+    const distribucionCompleta = [];
+    for (let hora = horaGlobalMin; hora < horaGlobalMax; hora++) {
+      distribucionCompleta.push({
+        hora: hora,
+        total_citas: resultadosMap.get(hora)?.total_citas || 0,
+        completadas: resultadosMap.get(hora)?.completadas || 0,
+        canceladas: resultadosMap.get(hora)?.canceladas || 0,
+      });
+    }
+
+    return ok(res, {
+      distribucion: distribucionCompleta,
+      rango_horario_global: `${String(horaGlobalMin).padStart(2, "0")}:00 - ${String(horaGlobalMax).padStart(2, "0")}:00`,
+      total_barberos: barberos.length,
+      periodo: { fecha_inicio, fecha_fin },
+    });
   } catch (error) {
+    console.error("Error en getDistribucionHoraria:", error);
     next(error);
   }
 };

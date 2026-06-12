@@ -18,7 +18,7 @@ export function useApi(apiFunction, options = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // ✅ Usar ref para evitar recrear la función
+  // ✅ Usar refs para valores que no deben cambiar entre renders
   const apiFunctionRef = useRef(apiFunction);
   const optionsRef = useRef({ showSuccess, showError, onSuccess, onError });
   const isMounted = useRef(true);
@@ -37,37 +37,49 @@ export function useApi(apiFunction, options = {}) {
     };
   }, []);
 
+  // ✅ Memoizar ejecutar con dependencias mínimas
   const ejecutar = useCallback(
     async (...args) => {
-      if (!isMounted.current) return;
+      if (!isMounted.current) return null;
 
       setLoading(true);
       setError(null);
+
       try {
         const resultado = await apiFunctionRef.current(...args);
+
         if (isMounted.current) {
           setData(resultado);
+
           if (optionsRef.current.showSuccess) {
-            addToast(
+            const successMsg =
               optionsRef.current.showSuccess === true
                 ? "Operación exitosa"
-                : optionsRef.current.showSuccess,
-              "success",
-            );
+                : optionsRef.current.showSuccess;
+            addToast(successMsg, "success");
           }
-          optionsRef.current.onSuccess?.(resultado);
+
+          if (optionsRef.current.onSuccess) {
+            optionsRef.current.onSuccess(resultado);
+          }
         }
+
         return resultado;
       } catch (err) {
         if (isMounted.current) {
           const message =
             err.response?.data?.message || err.message || "Error inesperado";
           setError(message);
+
           if (optionsRef.current.showError !== false) {
             addToast(message, "error");
           }
-          optionsRef.current.onError?.(message);
+
+          if (optionsRef.current.onError) {
+            optionsRef.current.onError(message);
+          }
         }
+
         return null;
       } finally {
         if (isMounted.current) {
@@ -75,12 +87,14 @@ export function useApi(apiFunction, options = {}) {
         }
       }
     },
-    [addToast], // ✅ Solo depende de addToast
+    [addToast], // ✅ Solo depende de addToast (que es estable)
   );
 
   const limpiar = useCallback(() => {
-    setData(null);
-    setError(null);
+    if (isMounted.current) {
+      setData(null);
+      setError(null);
+    }
   }, []);
 
   return { data, loading, error, ejecutar, limpiar };

@@ -1,5 +1,5 @@
 // src/hooks/useUsuarios.js
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useApi } from "./useApi";
 import * as usuarioService from "../services/usuarioService";
 
@@ -27,33 +27,6 @@ export const useUsuarios = () => {
     showSuccess: "Contraseña actualizada",
   });
 
-  // Wrappers para llamar las funciones
-  const listar = useCallback(
-    (filtros) => listarApi.ejecutar(filtros),
-    [listarApi],
-  );
-
-  const obtener = useCallback((id) => obtenerApi.ejecutar(id), [obtenerApi]);
-
-  const crear = useCallback((data) => crearApi.ejecutar(data), [crearApi]);
-
-  const actualizar = useCallback(
-    (id, data) => actualizarApi.ejecutar(id, data),
-    [actualizarApi],
-  );
-
-  const eliminar = useCallback((id) => eliminarApi.ejecutar(id), [eliminarApi]);
-
-  const cambiarRol = useCallback(
-    (id, rol) => cambiarRolApi.ejecutar(id, rol),
-    [cambiarRolApi],
-  );
-
-  const cambiarPassword = useCallback(
-    (id, pass) => cambiarPasswordApi.ejecutar(id, pass),
-    [cambiarPasswordApi],
-  );
-
   // Funciones específicas de barberos
   const listarBarberosApi = useApi(usuarioService.getBarberos);
   const perfilBarberoApi = useApi(usuarioService.getPerfilBarbero);
@@ -65,41 +38,94 @@ export const useUsuarios = () => {
     showSuccess: "Horario eliminado",
   });
 
+  // ✅ Memoizar ejecutores con useCallback
+  const listar = useCallback(
+    (filtros) => listarApi.ejecutar(filtros),
+    [listarApi.ejecutar],
+  );
+  const obtener = useCallback(
+    (id) => obtenerApi.ejecutar(id),
+    [obtenerApi.ejecutar],
+  );
+  const crear = useCallback(
+    (data) => crearApi.ejecutar(data),
+    [crearApi.ejecutar],
+  );
+  const actualizar = useCallback(
+    (id, data) => actualizarApi.ejecutar(id, data),
+    [actualizarApi.ejecutar],
+  );
+  const eliminar = useCallback(
+    (id) => eliminarApi.ejecutar(id),
+    [eliminarApi.ejecutar],
+  );
+  const cambiarRol = useCallback(
+    (id, rol) => cambiarRolApi.ejecutar(id, rol),
+    [cambiarRolApi.ejecutar],
+  );
+  const cambiarPassword = useCallback(
+    (id, pass) => cambiarPasswordApi.ejecutar(id, pass),
+    [cambiarPasswordApi.ejecutar],
+  );
+
+  // ✅ IMPORTANTE: listarBarberos debe ser estable entre renders
   const listarBarberos = useCallback(
     () => listarBarberosApi.ejecutar(),
-    [listarBarberosApi],
+    [listarBarberosApi.ejecutar],
   );
   const perfilBarbero = useCallback(
     (id) => perfilBarberoApi.ejecutar(id),
-    [perfilBarberoApi],
+    [perfilBarberoApi.ejecutar],
   );
   const horarioBarbero = useCallback(
     (id) => horarioBarberoApi.ejecutar(id),
-    [horarioBarberoApi],
+    [horarioBarberoApi.ejecutar],
   );
   const configurarHorario = useCallback(
     (id, data) => configurarHorarioApi.ejecutar(id, data),
-    [configurarHorarioApi],
+    [configurarHorarioApi.ejecutar],
   );
   const eliminarHorario = useCallback(
     (id, dia) => eliminarHorarioApi.ejecutar(id, dia),
-    [eliminarHorarioApi],
+    [eliminarHorarioApi.ejecutar],
   );
 
-  // Estados combinados
-  const loading =
-    listarApi.loading ||
-    obtenerApi.loading ||
-    crearApi.loading ||
-    actualizarApi.loading ||
-    eliminarApi.loading;
+  // Estados combinados con useMemo para evitar recálculos innecesarios
+  const loading = useMemo(
+    () =>
+      listarApi.loading ||
+      obtenerApi.loading ||
+      crearApi.loading ||
+      actualizarApi.loading ||
+      eliminarApi.loading ||
+      listarBarberosApi.loading,
+    [
+      listarApi.loading,
+      obtenerApi.loading,
+      crearApi.loading,
+      actualizarApi.loading,
+      eliminarApi.loading,
+      listarBarberosApi.loading,
+    ],
+  );
 
-  const error =
-    listarApi.error ||
-    obtenerApi.error ||
-    crearApi.error ||
-    actualizarApi.error ||
-    eliminarApi.error;
+  const error = useMemo(
+    () =>
+      listarApi.error ||
+      obtenerApi.error ||
+      crearApi.error ||
+      actualizarApi.error ||
+      eliminarApi.error ||
+      listarBarberosApi.error,
+    [
+      listarApi.error,
+      obtenerApi.error,
+      crearApi.error,
+      actualizarApi.error,
+      eliminarApi.error,
+      listarBarberosApi.error,
+    ],
+  );
 
   return {
     // Estados

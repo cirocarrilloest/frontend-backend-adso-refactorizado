@@ -1,5 +1,5 @@
 // frontend/src/hooks/useCitas.js
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useApi } from "./useApi";
 import * as citaService from "../services/citaService";
 
@@ -45,109 +45,169 @@ export const useCitas = () => {
   const getDistribucionHorariaApi = useApi(citaService.getDistribucionHoraria);
   const getTasaCancelacionApi = useApi(citaService.getTasaCancelacion);
 
-  const loading =
-    misCitasApi.loading ||
-    crearCitaApi.loading ||
-    cancelarCitaApi.loading ||
-    reagendarCitaApi.loading ||
-    confirmarCitaApi.loading ||
-    finalizarCitaApi.loading;
+  // ✅ Memoizar ejecutores con useCallback
+  const misCitas = useCallback(
+    () => misCitasApi.ejecutar(),
+    [misCitasApi.ejecutar],
+  );
+  const proximasCitas = useCallback(
+    () => proximasCitasApi.ejecutar(),
+    [proximasCitasApi.ejecutar],
+  );
+  const historialCitas = useCallback(
+    (limite) => historialCitasApi.ejecutar(limite),
+    [historialCitasApi.ejecutar],
+  );
+  const crearCita = useCallback(
+    (data) => crearCitaApi.ejecutar(data),
+    [crearCitaApi.ejecutar],
+  );
+  const cancelarCita = useCallback(
+    (id) => cancelarCitaApi.ejecutar(id),
+    [cancelarCitaApi.ejecutar],
+  );
+  const reagendarCita = useCallback(
+    (id, data) => reagendarCitaApi.ejecutar(id, data),
+    [reagendarCitaApi.ejecutar],
+  );
 
-  const error =
-    misCitasApi.error ||
-    crearCitaApi.error ||
-    cancelarCitaApi.error ||
-    reagendarCitaApi.error;
+  // Barbero
+  const citasBarbero = useCallback(
+    (barberoId, fecha, estado, limit) =>
+      citasBarberoApi.ejecutar(barberoId, fecha, estado, limit),
+    [citasBarberoApi.ejecutar],
+  );
+  const agendaSemana = useCallback(
+    (barberoId, fecha) => agendaSemanaApi.ejecutar(barberoId, fecha),
+    [agendaSemanaApi.ejecutar],
+  );
+  const verificarDisponibilidad = useCallback(
+    (barberoId, fecha, hora) =>
+      verificarDisponibilidadApi.ejecutar(barberoId, fecha, hora),
+    [verificarDisponibilidadApi.ejecutar],
+  );
+  const confirmarCita = useCallback(
+    (id) => confirmarCitaApi.ejecutar(id),
+    [confirmarCitaApi.ejecutar],
+  );
+  const finalizarCita = useCallback(
+    (id) => finalizarCitaApi.ejecutar(id),
+    [finalizarCitaApi.ejecutar],
+  );
+  const actualizarEstado = useCallback(
+    (id, estado) => actualizarEstadoApi.ejecutar(id, estado),
+    [actualizarEstadoApi.ejecutar],
+  );
+  const getResumenCitas = useCallback(
+    (fechaInicio, fechaFin) =>
+      getResumenCitasApi.ejecutar(fechaInicio, fechaFin),
+    [getResumenCitasApi.ejecutar],
+  );
+
+  // Admin
+  const crearCitaAdmin = useCallback(
+    (data) => crearCitaAdminApi.ejecutar(data),
+    [crearCitaAdminApi.ejecutar],
+  );
+  const getAllCitas = useCallback(
+    (filtros) => getAllCitasApi.ejecutar(filtros),
+    [getAllCitasApi.ejecutar],
+  );
+  const getDashboard = useCallback(
+    () => getDashboardApi.ejecutar(),
+    [getDashboardApi.ejecutar],
+  );
+  const getReporteIngresos = useCallback(
+    (periodo, inicio, fin) =>
+      getReporteIngresosApi.ejecutar(periodo, inicio, fin),
+    [getReporteIngresosApi.ejecutar],
+  );
+  const getServiciosTop = useCallback(
+    (limite, inicio, fin) => getServiciosTopApi.ejecutar(limite, inicio, fin),
+    [getServiciosTopApi.ejecutar],
+  );
+  const getClientesTop = useCallback(
+    (limite, inicio, fin) => getClientesTopApi.ejecutar(limite, inicio, fin),
+    [getClientesTopApi.ejecutar],
+  );
+  const getDistribucionHoraria = useCallback(
+    (inicio, fin, barberoId) =>
+      getDistribucionHorariaApi.ejecutar(inicio, fin, barberoId),
+    [getDistribucionHorariaApi.ejecutar],
+  );
+  const getTasaCancelacion = useCallback(
+    (inicio, fin) => getTasaCancelacionApi.ejecutar(inicio, fin),
+    [getTasaCancelacionApi.ejecutar],
+  );
+
+  // Estados combinados con useMemo
+  const loading = useMemo(
+    () =>
+      misCitasApi.loading ||
+      crearCitaApi.loading ||
+      cancelarCitaApi.loading ||
+      reagendarCitaApi.loading ||
+      confirmarCitaApi.loading ||
+      finalizarCitaApi.loading ||
+      getDistribucionHorariaApi.loading ||
+      getTasaCancelacionApi.loading,
+    [
+      misCitasApi.loading,
+      crearCitaApi.loading,
+      cancelarCitaApi.loading,
+      reagendarCitaApi.loading,
+      confirmarCitaApi.loading,
+      finalizarCitaApi.loading,
+      getDistribucionHorariaApi.loading,
+      getTasaCancelacionApi.loading,
+    ],
+  );
+
+  const error = useMemo(
+    () =>
+      misCitasApi.error ||
+      crearCitaApi.error ||
+      cancelarCitaApi.error ||
+      reagendarCitaApi.error ||
+      getDistribucionHorariaApi.error ||
+      getTasaCancelacionApi.error,
+    [
+      misCitasApi.error,
+      crearCitaApi.error,
+      cancelarCitaApi.error,
+      reagendarCitaApi.error,
+      getDistribucionHorariaApi.error,
+      getTasaCancelacionApi.error,
+    ],
+  );
 
   return {
     loading,
     error,
     // Cliente
-    misCitas: useCallback(() => misCitasApi.ejecutar(), [misCitasApi]),
-    proximasCitas: useCallback(
-      () => proximasCitasApi.ejecutar(),
-      [proximasCitasApi],
-    ),
-    historialCitas: useCallback(
-      (limite) => historialCitasApi.ejecutar(limite),
-      [historialCitasApi],
-    ),
-    crearCita: useCallback(
-      (data) => crearCitaApi.ejecutar(data),
-      [crearCitaApi],
-    ),
-    cancelarCita: useCallback(
-      (id) => cancelarCitaApi.ejecutar(id),
-      [cancelarCitaApi],
-    ),
-    reagendarCita: useCallback(
-      (id, data) => reagendarCitaApi.ejecutar(id, data),
-      [reagendarCitaApi],
-    ),
+    misCitas,
+    proximasCitas,
+    historialCitas,
+    crearCita,
+    cancelarCita,
+    reagendarCita,
     // Barbero
-    citasBarbero: useCallback(
-      (barberoId, fecha) => citasBarberoApi.ejecutar(barberoId, fecha),
-      [citasBarberoApi],
-    ),
-    agendaSemana: useCallback(
-      (barberoId, fecha) => agendaSemanaApi.ejecutar(barberoId, fecha),
-      [agendaSemanaApi],
-    ),
-    verificarDisponibilidad: useCallback(
-      (barberoId, fecha, hora) =>
-        verificarDisponibilidadApi.ejecutar(barberoId, fecha, hora),
-      [verificarDisponibilidadApi],
-    ),
-    confirmarCita: useCallback(
-      (id) => confirmarCitaApi.ejecutar(id),
-      [confirmarCitaApi],
-    ),
-    finalizarCita: useCallback(
-      (id) => finalizarCitaApi.ejecutar(id),
-      [finalizarCitaApi],
-    ),
-    actualizarEstado: useCallback(
-      (id, estado) => actualizarEstadoApi.ejecutar(id, estado),
-      [actualizarEstadoApi],
-    ),
-    getResumenCitas: useCallback(
-      () => getResumenCitasApi.ejecutar(),
-      [getResumenCitasApi],
-    ),
+    citasBarbero,
+    agendaSemana,
+    verificarDisponibilidad,
+    confirmarCita,
+    finalizarCita,
+    actualizarEstado,
+    getResumenCitas,
     // Admin
-    crearCitaAdmin: useCallback(
-      (data) => crearCitaAdminApi.ejecutar(data),
-      [crearCitaAdminApi],
-    ),
-    getAllCitas: useCallback(
-      (filtros) => getAllCitasApi.ejecutar(filtros),
-      [getAllCitasApi],
-    ),
-    getDashboard: useCallback(
-      () => getDashboardApi.ejecutar(),
-      [getDashboardApi],
-    ),
-    getReporteIngresos: useCallback(
-      (periodo, inicio, fin) =>
-        getReporteIngresosApi.ejecutar(periodo, inicio, fin),
-      [getReporteIngresosApi],
-    ),
-    getServiciosTop: useCallback(
-      (limite, inicio, fin) => getServiciosTopApi.ejecutar(limite, inicio, fin),
-      [getServiciosTopApi],
-    ),
-    getClientesTop: useCallback(
-      (limite, inicio, fin) => getClientesTopApi.ejecutar(limite, inicio, fin),
-      [getClientesTopApi],
-    ),
-    getDistribucionHoraria: useCallback(
-      (inicio, fin) => getDistribucionHorariaApi.ejecutar(inicio, fin),
-      [getDistribucionHorariaApi],
-    ),
-    getTasaCancelacion: useCallback(
-      (inicio, fin) => getTasaCancelacionApi.ejecutar(inicio, fin),
-      [getTasaCancelacionApi],
-    ),
+    crearCitaAdmin,
+    getAllCitas,
+    getDashboard,
+    getReporteIngresos,
+    getServiciosTop,
+    getClientesTop,
+    getDistribucionHoraria,
+    getTasaCancelacion,
   };
 };
 

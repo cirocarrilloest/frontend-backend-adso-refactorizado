@@ -188,15 +188,40 @@ export const getDashboard = async () => {
   return data;
 };
 
-/** Distribución horaria */
+/** ✅ Distribución horaria (MEJORADA - con barberoId y normalización de números) */
 export const getDistribucionHoraria = async (
   fecha_inicio = null,
   fecha_fin = null,
+  barberoId = null,
 ) => {
   const params = {};
   if (fecha_inicio) params.fecha_inicio = fecha_inicio;
   if (fecha_fin) params.fecha_fin = fecha_fin;
+  if (barberoId) params.barbero_id = barberoId;
+
   const { data } = await api.get("/citas/distribucion-horaria", { params });
+
+  // ✅ Asegurar que los valores sean números
+  if (data?.distribucion) {
+    data.distribucion = data.distribucion.map((item) => ({
+      ...item,
+      hora:
+        typeof item.hora === "number" ? item.hora : parseInt(item.hora) || 0,
+      total_citas:
+        typeof item.total_citas === "number"
+          ? item.total_citas
+          : parseInt(item.total_citas) || 0,
+      completadas:
+        typeof item.completadas === "number"
+          ? item.completadas
+          : parseInt(item.completadas) || 0,
+      canceladas:
+        typeof item.canceladas === "number"
+          ? item.canceladas
+          : parseInt(item.canceladas) || 0,
+    }));
+  }
+
   return data;
 };
 
