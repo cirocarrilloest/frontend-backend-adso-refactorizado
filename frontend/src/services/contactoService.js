@@ -20,3 +20,37 @@ export const marcarMensajeLeido = async (id) => {
   const { data } = await api.patch(`/contacto/mensajes/${id}/leer`);
   return data;
 };
+
+/** ✅ ELIMINAR MENSAJE (admin) - FUNCIÓN FALTANTE */
+export const eliminarMensaje = async (id) => {
+  const { data } = await api.delete(`/contacto/mensajes/${id}`);
+  return data;
+};
+
+/** ✅ ELIMINAR MÚLTIPLES MENSAJES (admin) */
+export const eliminarMensajesMultiples = async (ids) => {
+  const { data } = await api.post("/contacto/mensajes/eliminar-multiples", {
+    ids,
+  });
+  return data;
+};
+
+/** ✅ OBTENER MENSAJE POR ID (admin) */
+export const getMensajeById = async (id) => {
+  const { data } = await api.get(`/contacto/mensajes/${id}`);
+  return data;
+};
+
+/** ✅ MARCAR COMO RESPONDIDO (admin) */
+export const marcarMensajeRespondido = async (id, respuesta) => {
+  const { data } = await api.patch(`/contacto/mensajes/${id}/responder`, {
+    respuesta,
+  });
+  return data;
+};
+
+/** ✅ OBTENER ESTADÍSTICAS (admin) */
+export const getEstadisticasContacto = async () => {
+  const { data } = await api.get("/contacto/estadisticas");
+  return data;
+};
