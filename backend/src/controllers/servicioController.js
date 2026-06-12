@@ -1,205 +1,137 @@
-//src/controllers/servicioController.js
-import * as servicioModel from "../models/servicioModel.js";
+// backend/src/controllers/servicioController.js
+import { servicioRepository } from "../repositories/servicioRepository.js";
+import { ok, created, notFound } from "../utils/responseUtils.js";
+import { NotFoundError, ValidationError } from "../utils/errors.js";
 import { getPool } from "../config/db.js";
-// Crear nuevo servicio (admin)
-export const crearServicio = async (req, res) => {
+
+export const crearServicio = async (req, res, next) => {
   try {
     const { nombre, descripcion, duracion, precio, activo } = req.body;
 
     if (!nombre || !duracion || !precio) {
-      return res.status(400).json({
-        ok: false,
-        message: "Faltan campos requeridos: nombre, duracion, precio",
-      });
+      throw new ValidationError(
+        "Faltan campos requeridos: nombre, duracion, precio",
+      );
     }
 
-    const nuevoServicio = await servicioModel.createServicio({
+    const nuevoServicio = await servicioRepository.create({
       nombre,
       descripcion,
       duracion,
       precio,
-      activo,
+      activo: activo !== undefined ? activo : true,
     });
 
-    res.status(201).json({
-      ok: true,
+    return created(res, {
       message: "Servicio creado exitosamente",
       servicio: nuevoServicio,
     });
   } catch (error) {
-    console.error("Error al crear servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Obtener todos los servicios
-export const getServicios = async (req, res) => {
+export const getServicios = async (req, res, next) => {
   try {
     const soloActivos = req.query.activos === "true";
-    const servicios = await servicioModel.getAllServicios(soloActivos);
-
-    res.json({
-      ok: true,
-      servicios,
-    });
+    const servicios = await servicioRepository.findAll(soloActivos);
+    return ok(res, { servicios });
   } catch (error) {
-    console.error("Error al obtener servicios:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Obtener servicio por ID
-export const getServicioById = async (req, res) => {
+export const getServicioById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const servicio = await servicioModel.getServicioById(id);
-
+    const servicio = await servicioRepository.findById(id);
     if (!servicio) {
-      return res.status(404).json({
-        ok: false,
-        message: "Servicio no encontrado",
-      });
+      throw new NotFoundError("Servicio");
     }
-
-    res.json({
-      ok: true,
-      servicio,
-    });
+    return ok(res, { servicio });
   } catch (error) {
-    console.error("Error al obtener servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Actualizar servicio (admin)
-export const actualizarServicio = async (req, res) => {
+export const actualizarServicio = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { nombre, descripcion, duracion, precio, activo } = req.body;
 
-    const servicioExistente = await servicioModel.getServicioById(id);
+    const servicioExistente = await servicioRepository.findById(id);
     if (!servicioExistente) {
-      return res.status(404).json({
-        ok: false,
-        message: "Servicio no encontrado",
-      });
+      throw new NotFoundError("Servicio");
     }
 
-    const servicioActualizado = await servicioModel.updateServicio(id, {
-      nombre: nombre || servicioExistente.nombre,
-      descripcion:
-        descripcion !== undefined ? descripcion : servicioExistente.descripcion,
-      duracion: duracion || servicioExistente.duracion,
-      precio: precio || servicioExistente.precio,
-      activo: activo !== undefined ? activo : servicioExistente.activo,
-    });
+    const updates = {};
+    if (nombre !== undefined) updates.nombre = nombre;
+    if (descripcion !== undefined) updates.descripcion = descripcion;
+    if (duracion !== undefined) updates.duracion = duracion;
+    if (precio !== undefined) updates.precio = precio;
+    if (activo !== undefined) updates.activo = activo;
 
-    res.json({
-      ok: true,
+    const servicioActualizado = await servicioRepository.update(id, updates);
+
+    return ok(res, {
       message: "Servicio actualizado exitosamente",
       servicio: servicioActualizado,
     });
   } catch (error) {
-    console.error("Error al actualizar servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Eliminar servicio (admin)
-export const eliminarServicio = async (req, res) => {
+export const eliminarServicio = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    const servicioExistente = await servicioModel.getServicioById(id);
-    if (!servicioExistente) {
-      return res.status(404).json({
-        ok: false,
-        message: "Servicio no encontrado",
-      });
-    }
-
-    const eliminado = await servicioModel.deleteServicio(id);
-
-    if (!eliminado) {
-      return res.status(400).json({
-        ok: false,
-        message: "No se pudo eliminar el servicio. Puede tener citas asociadas",
-      });
-    }
-
-    res.json({
-      ok: true,
-      message: "Servicio eliminado exitosamente",
-    });
-  } catch (error) {
-    console.error("Error al eliminar servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
-  }
-};
-export const toggleActivoServicio = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = getPool();
-
-    const servicio = await servicioModel.getServicioById(id);
+    const servicio = await servicioRepository.findById(id);
     if (!servicio) {
-      return res.status(404).json({
-        ok: false,
-        message: "Servicio no encontrado",
-      });
+      throw new NotFoundError("Servicio");
     }
 
-    // Invertir el estado activo sin tocar los demás campos
-    await pool.execute(
-      "UPDATE servicios SET activo = NOT activo WHERE id = ?",
-      [id],
-    );
+    const eliminado = await servicioRepository.delete(id);
+    if (!eliminado) {
+      throw new ValidationError(
+        "No se pudo eliminar el servicio. Puede tener citas asociadas",
+      );
+    }
 
-    const servicioActualizado = await servicioModel.getServicioById(id);
+    return ok(res, { message: "Servicio eliminado exitosamente" });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    res.json({
-      ok: true,
+export const toggleActivoServicio = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const servicio = await servicioRepository.findById(id);
+    if (!servicio) {
+      throw new NotFoundError("Servicio");
+    }
+
+    const servicioActualizado = await servicioRepository.update(id, {
+      activo: !servicio.activo,
+    });
+
+    return ok(res, {
       message: `Servicio ${servicioActualizado.activo ? "activado" : "desactivado"} exitosamente`,
       servicio: servicioActualizado,
     });
   } catch (error) {
-    console.error("Error al cambiar estado del servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-export const getBarberosPorServicio = async (req, res) => {
+export const getBarberosPorServicio = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    const servicio = await servicioModel.getServicioById(id);
+    const servicio = await servicioRepository.findById(id);
     if (!servicio || !servicio.activo) {
-      return res.status(404).json({
-        ok: false,
-        message: "Servicio no encontrado o inactivo",
-      });
+      throw new NotFoundError("Servicio no encontrado o inactivo");
     }
 
-    // Todos los barberos activos pueden realizar cualquier servicio
-    // Si en el futuro hay especialidades, se filtraría aquí por tabla pivot
     const pool = getPool();
     const [barberos] = await pool.execute(
       `SELECT u.id, u.nombre, u.email, u.telefono,
@@ -214,16 +146,21 @@ export const getBarberosPorServicio = async (req, res) => {
       [id],
     );
 
-    res.json({
-      ok: true,
+    return ok(res, {
       servicio: { id: servicio.id, nombre: servicio.nombre },
       barberos,
     });
   } catch (error) {
-    console.error("Error al obtener barberos por servicio:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
+};
+
+export default {
+  crearServicio,
+  getServicios,
+  getServicioById,
+  actualizarServicio,
+  eliminarServicio,
+  toggleActivoServicio,
+  getBarberosPorServicio,
 };

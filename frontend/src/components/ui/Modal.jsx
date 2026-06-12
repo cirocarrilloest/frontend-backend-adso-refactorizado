@@ -5,8 +5,8 @@ export const Modal = ({ isOpen, onClose, children, title }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-100 dark:border-white/10">
         <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/10">
           <h3 className="font-bold text-gray-900 dark:text-white">{title}</h3>
           <button
@@ -21,3 +21,5 @@ export const Modal = ({ isOpen, onClose, children, title }) => {
     </div>
   );
 };
+
+export default Modal;

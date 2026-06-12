@@ -13,8 +13,8 @@ import {
 import { editarCitaAdmin } from "../../services/citaService";
 import { getBarberos } from "../../services/usuarioService";
 import { getServicios } from "../../services/servicioService";
+import { useToast } from "../../context/ToastContext";
 
-// Formateadores
 const fmtHoraInput = (hora) => {
   if (!hora) return "09:00";
   return String(hora).slice(0, 5);
@@ -26,6 +26,7 @@ export default function ModalEditarCita({
   onClose,
   onCitaActualizada,
 }) {
+  const { addToast } = useToast();
   const [formData, setFormData] = useState({
     fecha: "",
     hora: "",
@@ -40,7 +41,6 @@ export default function ModalEditarCita({
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
 
-  // Cargar datos iniciales (barberos, servicios) y llenar formulario
   useEffect(() => {
     if (isOpen && cita) {
       const cargarDatos = async () => {
@@ -55,7 +55,6 @@ export default function ModalEditarCita({
           setBarberos(barberosRes.barberos || barberosRes || []);
           setServicios(serviciosRes.servicios || serviciosRes || []);
 
-          // Llenar formulario con datos de la cita
           setFormData({
             fecha: cita.fecha ? cita.fecha.split("T")[0] : "",
             hora: fmtHoraInput(cita.hora),
@@ -105,10 +104,15 @@ export default function ModalEditarCita({
         notas: formData.notas,
         estado: formData.estado,
       });
+      addToast("Cita actualizada exitosamente", "success");
       onCitaActualizada?.();
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || "Error al actualizar la cita");
+      addToast(
+        err.response?.data?.message || "Error al actualizar la cita",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
@@ -123,16 +127,12 @@ export default function ModalEditarCita({
 
   return (
     <>
-      {/* Overlay */}
       <div
         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]"
         onClick={onClose}
       />
-
-      {/* Modal - versión más compacta */}
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[95%] max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl overflow-hidden">
-          {/* Header más compacto */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">
               Editar Cita #{cita?.id}
@@ -145,7 +145,6 @@ export default function ModalEditarCita({
             </button>
           </div>
 
-          {/* Formulario - Layout de 2 columnas para campos pequeños */}
           <form onSubmit={handleSubmit} className="p-4">
             {loadingData ? (
               <div className="flex justify-center py-8">
@@ -153,7 +152,6 @@ export default function ModalEditarCita({
               </div>
             ) : (
               <>
-                {/* Error más compacto */}
                 {error && (
                   <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-lg text-xs mb-3">
                     <AlertTriangle size={12} />
@@ -161,9 +159,7 @@ export default function ModalEditarCita({
                   </div>
                 )}
 
-                {/* Grid de 2 columnas para campos pequeños */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  {/* Fecha */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       <Calendar size={12} className="inline mr-1" /> Fecha *
@@ -177,8 +173,6 @@ export default function ModalEditarCita({
                       className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                     />
                   </div>
-
-                  {/* Hora */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       <Clock size={12} className="inline mr-1" /> Hora *
@@ -195,9 +189,7 @@ export default function ModalEditarCita({
                   </div>
                 </div>
 
-                {/* Grid de 2 columnas para selects */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  {/* Barbero */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       <User size={12} className="inline mr-1" /> Barbero *
@@ -217,8 +209,6 @@ export default function ModalEditarCita({
                       ))}
                     </select>
                   </div>
-
-                  {/* Servicio */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       <Scissors size={12} className="inline mr-1" /> Servicio *
@@ -241,7 +231,6 @@ export default function ModalEditarCita({
                   </div>
                 </div>
 
-                {/* Estado - línea completa */}
                 <div className="mb-3">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Estado
@@ -260,7 +249,6 @@ export default function ModalEditarCita({
                   </select>
                 </div>
 
-                {/* Notas - más compacta */}
                 <div className="mb-4">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     <FileText size={12} className="inline mr-1" /> Notas
@@ -275,7 +263,6 @@ export default function ModalEditarCita({
                   />
                 </div>
 
-                {/* Botones más compactos */}
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"

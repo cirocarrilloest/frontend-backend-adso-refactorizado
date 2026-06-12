@@ -1,6 +1,4 @@
 // frontend/src/components/dashboard/VistaAgendaSemanal.jsx
-//
-
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronLeft,
@@ -16,8 +14,8 @@ import {
 } from "lucide-react";
 import { getAgendaSemana } from "../../services/citaService";
 import DrawerDetalleCita from "./DrawerDetalleCita";
-
-// helpers
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
 
 const lunesDe = (fecha) => {
   const d = new Date(fecha + "T12:00:00");
@@ -33,7 +31,6 @@ const addDias = (s, n) => {
 };
 
 const HOY = new Date().toISOString().split("T")[0];
-
 const DIAS_CORTO = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const DIAS_LARGO = [
   "Lunes",
@@ -70,8 +67,7 @@ const fmtRango = (ini, fin) => {
 
 const fmtHora = (raw) => String(raw || "").slice(0, 5);
 const pct = (n) => Math.min(100, Math.round((n / 14) * 100));
-
-const idxLocal = (jsDay) => (jsDay === 0 ? 6 : jsDay - 1); // 0=Lun…6=Dom
+const idxLocal = (jsDay) => (jsDay === 0 ? 6 : jsDay - 1);
 
 const ESTADO_CFG = {
   pendiente: {
@@ -96,33 +92,6 @@ const ESTADO_CFG = {
   },
 };
 
-// ── sub-componentes ───────────────────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <RefreshCw size={22} className="animate-spin text-amber-400" />
-      <p className="text-xs text-gray-400">Cargando agenda semanal…</p>
-    </div>
-  );
-}
-
-function ErrorView({ msg, onRetry }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-      <AlertCircle size={24} className="text-red-400" />
-      <p className="text-sm text-red-600 dark:text-red-400">{msg}</p>
-      <button
-        onClick={onRetry}
-        className="text-xs text-amber-500 hover:text-amber-600 flex items-center gap-1.5 transition-colors"
-      >
-        <RefreshCw size={12} /> Reintentar
-      </button>
-    </div>
-  );
-}
-
-// Pill de cita dentro de una columna de día (desktop)
 function CitaPill({ cita, onClick }) {
   const cfg = ESTADO_CFG[cita.estado] || ESTADO_CFG.cancelada;
   const Icon = cfg.Icon;
@@ -152,7 +121,6 @@ function CitaPill({ cita, onClick }) {
   );
 }
 
-// Columna de día para el grid desktop
 function ColumnaDia({ fecha, citas, onClickCita }) {
   const d = new Date(fecha + "T12:00:00");
   const jsDia = d.getDay();
@@ -163,20 +131,10 @@ function ColumnaDia({ fecha, citas, onClickCita }) {
 
   return (
     <div
-      className={`
-      flex flex-col rounded-2xl overflow-hidden border transition-shadow
-      ${
-        esHoy
-          ? "border-amber-300 dark:border-amber-600 ring-2 ring-amber-100 dark:ring-amber-900/40 shadow-md"
-          : "border-gray-100 dark:border-white/5 shadow-sm"
-      }
-      ${esFinde && !esHoy ? "bg-gray-50/70 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}
-    `}
+      className={`flex flex-col rounded-2xl overflow-hidden border transition-shadow ${esHoy ? "border-amber-300 dark:border-amber-600 ring-2 ring-amber-100 dark:ring-amber-900/40 shadow-md" : "border-gray-100 dark:border-white/5 shadow-sm"} ${esFinde && !esHoy ? "bg-gray-50/70 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}`}
     >
-      {/* Cabecera */}
       <div
-        className={`px-2.5 py-2 border-b flex flex-col gap-0.5
-        ${esHoy ? "bg-amber-400 border-amber-300" : "bg-gray-50 dark:bg-gray-700/40 border-gray-100 dark:border-white/5"}`}
+        className={`px-2.5 py-2 border-b flex flex-col gap-0.5 ${esHoy ? "bg-amber-400 border-amber-300" : "bg-gray-50 dark:bg-gray-700/40 border-gray-100 dark:border-white/5"}`}
       >
         <span
           className={`text-xs font-semibold uppercase tracking-wider ${esHoy ? "text-gray-900/70" : "text-gray-400 dark:text-gray-500"}`}
@@ -190,8 +148,7 @@ function ColumnaDia({ fecha, citas, onClickCita }) {
         </span>
         {citas.length > 0 ? (
           <span
-            className={`text-xs font-bold self-start px-1.5 py-0.5 rounded-full leading-none
-            ${esHoy ? "bg-gray-900/15 text-gray-900" : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"}`}
+            className={`text-xs font-bold self-start px-1.5 py-0.5 rounded-full leading-none ${esHoy ? "bg-gray-900/15 text-gray-900" : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"}`}
           >
             {citas.length}
           </span>
@@ -201,16 +158,12 @@ function ColumnaDia({ fecha, citas, onClickCita }) {
           </span>
         )}
       </div>
-
-      {/* Barra de ocupación */}
       <div className="h-0.5 bg-gray-100 dark:bg-gray-700/40">
         <div
           className={`h-full transition-all duration-700 ${esHoy ? "bg-amber-500" : "bg-amber-300 dark:bg-amber-700/60"}`}
           style={{ width: `${ocupacion}%` }}
         />
       </div>
-
-      {/* Citas */}
       <div
         className="flex-1 p-1.5 space-y-1 overflow-y-auto"
         style={{ minHeight: 100 }}
@@ -229,7 +182,6 @@ function ColumnaDia({ fecha, citas, onClickCita }) {
   );
 }
 
-// Resumen numérico de la semana
 function ResumenSemana({ agenda }) {
   const todas = Object.values(agenda).flat();
   const cnt = todas.reduce((a, c) => {
@@ -276,7 +228,6 @@ function ResumenSemana({ agenda }) {
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
 export default function VistaAgendaSemanal({ barberoId }) {
   const [semanaInicio, setSemanaInicio] = useState(() => lunesDe(HOY));
   const [agenda, setAgenda] = useState({});
@@ -318,7 +269,6 @@ export default function VistaAgendaSemanal({ barberoId }) {
     () => Array.from({ length: 7 }, (_, i) => addDias(semanaInicio, i)),
     [semanaInicio],
   );
-
   const esSemanaActual = semanaInicio === lunesDe(HOY);
 
   const handleAccionDrawer = (citaActualizada) => {
@@ -339,16 +289,13 @@ export default function VistaAgendaSemanal({ barberoId }) {
   return (
     <>
       <div className="space-y-4">
-        {/* ── Navegación ────────────────────────────────────────────────────── */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
           <button
             onClick={() => setSemanaInicio((s) => addDias(s, -7))}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-amber-500 transition-all"
-            aria-label="Semana anterior"
           >
             <ChevronLeft size={18} />
           </button>
-
           <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <CalendarDays
@@ -379,7 +326,6 @@ export default function VistaAgendaSemanal({ barberoId }) {
               )}
             </div>
           </div>
-
           <div className="flex items-center gap-1">
             <button
               onClick={cargar}
@@ -401,16 +347,12 @@ export default function VistaAgendaSemanal({ barberoId }) {
           </div>
         </div>
 
-        {/* ── Resumen ───────────────────────────────────────────────────────── */}
         {!loading && !error && <ResumenSemana agenda={agenda} />}
-
-        {/* ── Contenido ─────────────────────────────────────────────────────── */}
         {loading && <Spinner />}
-        {!loading && error && <ErrorView msg={error} onRetry={cargar} />}
+        {!loading && error && <ErrorBanner message={error} onRetry={cargar} />}
 
         {!loading && !error && (
           <>
-            {/* Mobile: lista vertical */}
             <div className="flex flex-col gap-3 md:hidden">
               {dias.map((fecha) => {
                 const citasDia = agenda[fecha] || [];
@@ -419,18 +361,13 @@ export default function VistaAgendaSemanal({ barberoId }) {
                 const idx = idxLocal(jsDia);
                 const esHoy = fecha === HOY;
                 const esFinde = jsDia === 0 || jsDia === 6;
-
                 return (
                   <div
                     key={fecha}
-                    className={`rounded-2xl border overflow-hidden
-                    ${esHoy ? "border-amber-300 dark:border-amber-600 ring-2 ring-amber-100 dark:ring-amber-900/30" : "border-gray-100 dark:border-white/5"}
-                    ${esFinde && !esHoy ? "bg-gray-50 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}`}
+                    className={`rounded-2xl border overflow-hidden ${esHoy ? "border-amber-300 dark:border-amber-600 ring-2 ring-amber-100 dark:ring-amber-900/30" : "border-gray-100 dark:border-white/5"} ${esFinde && !esHoy ? "bg-gray-50 dark:bg-gray-800/50" : "bg-white dark:bg-gray-800"}`}
                   >
-                    {/* Cabecera mobile */}
                     <div
-                      className={`flex items-center justify-between px-4 py-3 border-b
-                      ${esHoy ? "bg-amber-400 border-amber-300" : "bg-gray-50 dark:bg-gray-700/40 border-gray-100 dark:border-white/5"}`}
+                      className={`flex items-center justify-between px-4 py-3 border-b ${esHoy ? "bg-amber-400 border-amber-300" : "bg-gray-50 dark:bg-gray-700/40 border-gray-100 dark:border-white/5"}`}
                     >
                       <div className="flex items-center gap-2">
                         <span
@@ -450,22 +387,13 @@ export default function VistaAgendaSemanal({ barberoId }) {
                         )}
                       </div>
                       <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full
-                        ${
-                          citasDia.length > 0
-                            ? esHoy
-                              ? "bg-gray-900/15 text-gray-900"
-                              : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                            : "text-gray-300 dark:text-gray-600"
-                        }`}
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${citasDia.length > 0 ? (esHoy ? "bg-gray-900/15 text-gray-900" : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400") : "text-gray-300 dark:text-gray-600"}`}
                       >
                         {citasDia.length > 0
                           ? `${citasDia.length} cita${citasDia.length > 1 ? "s" : ""}`
                           : "libre"}
                       </span>
                     </div>
-
-                    {/* Citas mobile */}
                     {citasDia.length > 0 ? (
                       <div className="divide-y divide-gray-100 dark:divide-white/5">
                         {citasDia.map((c) => {
@@ -514,7 +442,6 @@ export default function VistaAgendaSemanal({ barberoId }) {
               })}
             </div>
 
-            {/* Desktop: grid 7 columnas */}
             <div
               className="hidden md:grid grid-cols-7 gap-2"
               style={{ minHeight: 340 }}
@@ -529,7 +456,6 @@ export default function VistaAgendaSemanal({ barberoId }) {
               ))}
             </div>
 
-            {/* Leyenda */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 pt-1">
               {Object.entries(ESTADO_CFG).map(([estado, cfg]) => (
                 <div key={estado} className="flex items-center gap-1.5">
@@ -543,8 +469,6 @@ export default function VistaAgendaSemanal({ barberoId }) {
           </>
         )}
       </div>
-
-      {/* Drawer detalle */}
       <DrawerDetalleCita
         citaId={citaIdDetalle}
         onClose={() => setCitaIdDetalle(null)}

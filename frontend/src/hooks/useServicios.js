@@ -1,74 +1,57 @@
 // frontend/src/hooks/useServicios.js
-import { useState, useCallback } from "react";
-import {
-  getServicios,
-  getServicioById,
-  crearServicio,
-  actualizarServicio,
-  eliminarServicio,
-  toggleActivoServicio,
-  getBarberosPorServicio,
-} from "../services/servicioService";
+import { useCallback } from "react";
+import { useApi } from "./useApi";
+import * as servicioService from "../services/servicioService";
 
 export const useServicios = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const listarApi = useApi(servicioService.getServicios);
+  const obtenerApi = useApi(servicioService.getServicioById);
+  const crearApi = useApi(servicioService.crearServicio, {
+    showSuccess: "Servicio creado exitosamente",
+  });
+  const actualizarApi = useApi(servicioService.actualizarServicio, {
+    showSuccess: "Servicio actualizado exitosamente",
+  });
+  const eliminarApi = useApi(servicioService.eliminarServicio, {
+    showSuccess: "Servicio eliminado exitosamente",
+  });
+  const toggleActivoApi = useApi(servicioService.toggleActivoServicio);
+  const barberosPorServicioApi = useApi(servicioService.getBarberosPorServicio);
 
-  const handleRequest = useCallback(async (fn, ...args) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fn(...args);
-      return result;
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Error en la operación";
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loading =
+    listarApi.loading ||
+    crearApi.loading ||
+    actualizarApi.loading ||
+    eliminarApi.loading;
 
-  const listar = useCallback(
-    (soloActivos) => handleRequest(getServicios, soloActivos),
-    [handleRequest],
-  );
-  const obtener = useCallback(
-    (id) => handleRequest(getServicioById, id),
-    [handleRequest],
-  );
-  const crear = useCallback(
-    (data) => handleRequest(crearServicio, data),
-    [handleRequest],
-  );
-  const actualizar = useCallback(
-    (id, data) => handleRequest(actualizarServicio, id, data),
-    [handleRequest],
-  );
-  const eliminar = useCallback(
-    (id) => handleRequest(eliminarServicio, id),
-    [handleRequest],
-  );
-  const toggleActivo = useCallback(
-    (id) => handleRequest(toggleActivoServicio, id),
-    [handleRequest],
-  );
-  const barberosPorServicio = useCallback(
-    (id) => handleRequest(getBarberosPorServicio, id),
-    [handleRequest],
-  );
+  const error =
+    listarApi.error ||
+    crearApi.error ||
+    actualizarApi.error ||
+    eliminarApi.error;
 
   return {
     loading,
     error,
-    listar,
-    obtener,
-    crear,
-    actualizar,
-    eliminar,
-    toggleActivo,
-    barberosPorServicio,
+    listar: useCallback(
+      (soloActivos) => listarApi.ejecutar(soloActivos),
+      [listarApi],
+    ),
+    obtener: useCallback((id) => obtenerApi.ejecutar(id), [obtenerApi]),
+    crear: useCallback((data) => crearApi.ejecutar(data), [crearApi]),
+    actualizar: useCallback(
+      (id, data) => actualizarApi.ejecutar(id, data),
+      [actualizarApi],
+    ),
+    eliminar: useCallback((id) => eliminarApi.ejecutar(id), [eliminarApi]),
+    toggleActivo: useCallback(
+      (id) => toggleActivoApi.ejecutar(id),
+      [toggleActivoApi],
+    ),
+    barberosPorServicio: useCallback(
+      (id) => barberosPorServicioApi.ejecutar(id),
+      [barberosPorServicioApi],
+    ),
   };
 };
 

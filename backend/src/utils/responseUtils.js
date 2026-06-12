@@ -1,14 +1,7 @@
 // src/utils/responseUtils.js
-
 /**
- * Helpers de respuesta HTTP.
- * Eliminan el boilerplate repetido en cada controller (50+ instancias).
- *
- * Antes (patrón repetido):
- *   res.status(500).json({ ok: false, message: "Error interno del servidor" });
- *
- * Ahora:
- *   return serverError(res);
+ * Helpers de respuesta HTTP estandarizados.
+ * Todos los controladores DEBEN usar estas funciones.
  */
 
 export const ok = (res, data = {}, status = 200) => {
@@ -17,6 +10,10 @@ export const ok = (res, data = {}, status = 200) => {
 
 export const created = (res, data = {}) => {
   return res.status(201).json({ ok: true, ...data });
+};
+
+export const noContent = (res) => {
+  return res.status(204).send();
 };
 
 export const badRequest = (res, message) => {
@@ -39,8 +36,8 @@ export const conflict = (res, message) => {
   return res.status(409).json({ ok: false, message });
 };
 
-export const serverError = (res, context = "", error = null) => {
-  if (error) console.error(`Error en ${context}:`, error.message || error);
+export const serverError = (res, error = null) => {
+  if (error) console.error("[ResponseError]", error.message || error);
   return res
     .status(500)
     .json({ ok: false, message: "Error interno del servidor" });

@@ -1,37 +1,15 @@
 // backend/src/controllers/contactoController.js
-
-/**
- * contactoController.js
- *
- * REFACTORIZACIÓN:
- * - Problema anterior: llamaba getPool() directamente (acceso a datos en controller)
- * - Problema anterior: no usaba responseUtils — duplicaba el patrón de error
- * - Problema anterior: el loop de notificaciones a admins mezclaba responsabilidades
- * - Solución: delegar SQL al repositorio, usar responseUtils, mantener controller
- *   únicamente como capa HTTP (validar entrada → llamar repo/servicio → responder)
- *
- * Principio aplicado: SRP + Dependency Inversion
- */
-
 import { contactoRepository } from "../repositories/contactoRepository.js";
-import { crearNotificacion } from "../models/notificacionModel.js";
-import {
-  ok,
-  badRequest,
-  notFound,
-  serverError,
-} from "../utils/responseUtils.js";
+import { notificacionService } from "../services/notificacionService.js";
+import { ok, badRequest } from "../utils/responseUtils.js";
+import { ValidationError } from "../utils/errors.js";
 
-/**
- * POST /api/contacto
- * Público — cualquier visitante puede enviar un mensaje.
- */
-export const enviarMensajeContacto = async (req, res) => {
+export const enviarMensajeContacto = async (req, res, next) => {
   try {
     const { name, email, message } = req.body;
 
     if (!name || !email || !message) {
-      return badRequest(res, "Nombre, email y mensaje son requeridos");
+      throw new ValidationError("Nombre, email y mensaje son requeridos");
     }
 
     const mensajeId = await contactoRepository.crear({
@@ -40,31 +18,27 @@ export const enviarMensajeContacto = async (req, res) => {
       mensaje: message,
     });
 
-    // Notificar a todos los admins — responsabilidad de servicio de notificaciones
+    // Notificar a todos los admins
     const adminIds = await contactoRepository.getAdminIds();
     await Promise.all(
       adminIds.map((adminId) =>
-        crearNotificacion(
-          adminId,
-          "contacto",
-          "Nuevo mensaje de contacto",
-          `${name} (${email}) ha enviado un mensaje`,
-          { mensajeId, nombre: name, email },
-        ),
+        notificacionService.crear({
+          usuarioId: adminId,
+          tipo: "contacto",
+          titulo: "Nuevo mensaje de contacto",
+          mensaje: `${name} (${email}) ha enviado un mensaje`,
+          data: { mensajeId, nombre: name, email },
+        }),
       ),
     );
 
     return ok(res, { message: "Mensaje enviado exitosamente" });
   } catch (error) {
-    return serverError(res, "enviarMensajeContacto", error);
+    next(error);
   }
 };
 
-/**
- * GET /api/contacto/mensajes
- * Solo admin — lista mensajes con filtro opcional de no leídos.
- */
-export const getMensajesContacto = async (req, res) => {
+export const getMensajesContacto = async (req, res, next) => {
   try {
     const { soloNoLeidos = "false", limite = 50 } = req.query;
 
@@ -75,15 +49,11 @@ export const getMensajesContacto = async (req, res) => {
 
     return ok(res, { mensajes });
   } catch (error) {
-    return serverError(res, "getMensajesContacto", error);
+    next(error);
   }
 };
 
-/**
- * PATCH /api/contacto/mensajes/:id/leer
- * Solo admin — marca un mensaje como leído.
- */
-export const marcarMensajeLeido = async (req, res) => {
+export const marcarMensajeLeido = async (req, res, next) => {
   try {
     const { id } = req.params;
     const actualizado = await contactoRepository.marcarLeido(id);
@@ -94,6 +64,12 @@ export const marcarMensajeLeido = async (req, res) => {
 
     return ok(res, { message: "Mensaje marcado como leído" });
   } catch (error) {
-    return serverError(res, "marcarMensajeLeido", error);
+    next(error);
   }
+};
+
+export default {
+  enviarMensajeContacto,
+  getMensajesContacto,
+  marcarMensajeLeido,
 };

@@ -3,10 +3,7 @@ import express from "express";
 import * as servicioController from "../controllers/servicioController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { esAdmin } from "../middlewares/roleMiddleware.js";
-import {
-  validarActualizarServicio,
-  validarServicio,
-} from "../middlewares/validationMiddleware.js";
+import { validarServicioMiddleware } from "../middlewares/validationMiddleware.js";
 
 const router = express.Router();
 
@@ -24,14 +21,14 @@ router.post(
   "/",
   authMiddleware,
   esAdmin,
-  validarServicio,
+  validarServicioMiddleware,
   servicioController.crearServicio,
 );
 router.put(
   "/:id",
   authMiddleware,
   esAdmin,
-  validarActualizarServicio,
+  validarServicioMiddleware,
   servicioController.actualizarServicio,
 );
 

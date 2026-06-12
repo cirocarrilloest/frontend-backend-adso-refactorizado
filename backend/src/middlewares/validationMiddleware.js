@@ -1,141 +1,150 @@
 // src/middlewares/validationMiddleware.js
-import joi from "joi";
 
-// Validación para crear/agendar cita
-export const validarCita = (req, res, next) => {
-  const schema = joi.object({
-    barbero_id: joi.number().integer().positive().required(),
-    servicio_id: joi.number().integer().positive().required(),
-    fecha: joi.date().iso().required(),
-    hora: joi
-      .string()
-      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-      .required(),
-    notas: joi.string().max(500).optional().allow(""),
-  });
+/**
+ * Middleware para validar datos de registro de usuario
+ */
+export const validarRegistroMiddleware = (req, res, next) => {
+  const { nombre, email, password, telefono } = req.body;
+  const errores = [];
 
-  const { error } = schema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ ok: false, message: error.details[0].message });
-  }
-  next();
-};
-
-// Validación para crear servicio
-export const validarServicio = (req, res, next) => {
-  const schema = joi.object({
-    nombre: joi.string().min(3).max(100).required(),
-    descripcion: joi.string().max(500).optional().allow(""),
-    duracion: joi.number().integer().min(5).max(240).required(),
-    precio: joi.number().positive().required(),
-    activo: joi.boolean().optional(),
-  });
-
-  const { error } = schema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ ok: false, message: error.details[0].message });
-  }
-  next();
-};
-
-// Validación para actualizar servicio (campos opcionales)
-export const validarActualizarServicio = (req, res, next) => {
-  const schema = joi.object({
-    nombre: joi.string().min(3).max(100).optional(),
-    descripcion: joi.string().max(500).optional().allow(""),
-    duracion: joi.number().integer().min(5).max(240).optional(),
-    precio: joi.number().positive().optional(),
-    activo: joi.boolean().optional(),
-  });
-
-  const { error } = schema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ ok: false, message: error.details[0].message });
+  // Validar nombre
+  if (!nombre || nombre.trim().length < 3) {
+    errores.push("El nombre debe tener al menos 3 caracteres");
   }
 
-  if (Object.keys(req.body).length === 0) {
+  // Validar email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    errores.push("El email no es válido");
+  }
+
+  // Validar password
+  if (!password || password.length < 6) {
+    errores.push("La contraseña debe tener al menos 6 caracteres");
+  }
+
+  // Validar teléfono (opcional)
+  if (telefono && telefono.length < 10) {
+    errores.push("El teléfono debe tener al menos 10 dígitos");
+  }
+
+  if (errores.length > 0) {
     return res.status(400).json({
-      ok: false,
-      message: "Debes proporcionar al menos un campo para actualizar",
+      success: false,
+      errores: errores,
     });
   }
+
   next();
 };
 
-// Validación de ID en parámetros
-export const validarId = (req, res, next) => {
-  const { error } = joi
-    .object({
-      id: joi.number().integer().positive().required(),
-    })
-    .validate(req.params);
+/**
+ * Middleware para validar datos de cita
+ */
+export const validarCitaMiddleware = (req, res, next) => {
+  const { barbero_id, servicio_id, fecha, hora } = req.body;
+  const errores = [];
 
-  if (error) {
-    return res.status(400).json({ ok: false, message: "ID inválido" });
+  if (!barbero_id) {
+    errores.push("El barbero es requerido");
   }
+
+  if (!servicio_id) {
+    errores.push("El servicio es requerido");
+  }
+
+  if (!fecha) {
+    errores.push("La fecha es requerida");
+  }
+
+  if (!hora) {
+    errores.push("La hora es requerida");
+  }
+
+  // Validar formato de fecha (YYYY-MM-DD)
+  const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (fecha && !fechaRegex.test(fecha)) {
+    errores.push("El formato de fecha debe ser YYYY-MM-DD");
+  }
+
+  // Validar formato de hora (HH:MM)
+  const horaRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+  if (hora && !horaRegex.test(hora)) {
+    errores.push("El formato de hora debe ser HH:MM");
+  }
+
+  if (errores.length > 0) {
+    return res.status(400).json({
+      success: false,
+      errores: errores,
+    });
+  }
+
   next();
 };
 
-// Validación para configurar horario de barbero
-export const validarHorario = (req, res, next) => {
-  const diasValidos = [
-    "lunes",
-    "martes",
-    "miercoles",
-    "jueves",
-    "viernes",
-    "sabado",
-    "domingo",
-  ];
-  const schema = joi.object({
-    dia_semana: joi
-      .string()
-      .valid(...diasValidos)
-      .required(),
-    hora_inicio: joi
-      .string()
-      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-      .required(),
-    hora_fin: joi
-      .string()
-      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-      .required(),
-  });
+/**
+ * Middleware para validar datos de servicio (✅ AGREGAR ESTE)
+ */
+export const validarServicioMiddleware = (req, res, next) => {
+  const { nombre, duracion, precio, descripcion } = req.body;
+  const errores = [];
 
-  const { error } = schema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ ok: false, message: error.details[0].message });
+  // Validar nombre
+  if (!nombre || nombre.trim().length < 3) {
+    errores.push("El nombre debe tener al menos 3 caracteres");
   }
+
+  // Validar duración (entre 5 y 240 minutos)
+  if (!duracion || duracion < 5 || duracion > 240) {
+    errores.push("La duración debe estar entre 5 y 240 minutos");
+  }
+
+  // Validar precio (mayor a 0)
+  if (!precio || precio <= 0) {
+    errores.push("El precio debe ser mayor a 0");
+  }
+
+  // Validar que precio sea número
+  if (precio && isNaN(parseFloat(precio))) {
+    errores.push("El precio debe ser un número válido");
+  }
+
+  // Validar descripción (opcional)
+  if (descripcion && descripcion.length > 500) {
+    errores.push("La descripción no puede tener más de 500 caracteres");
+  }
+
+  if (errores.length > 0) {
+    return res.status(400).json({
+      success: false,
+      errores: errores,
+    });
+  }
+
   next();
 };
 
-// Validación para crear cita como administrador
-export const validarCitaAdmin = (req, res, next) => {
-  const schema = joi.object({
-    cliente_id: joi.number().integer().positive().required(),
-    barbero_id: joi.number().integer().positive().required(),
-    servicio_id: joi.number().integer().positive().required(),
-    fecha: joi.date().iso().required(),
-    hora: joi
-      .string()
-      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
-      .required(),
-    notas: joi.string().max(500).optional().allow("", null),
-  });
+/**
+ * Middleware para validar ID
+ */
+export const validarIdMiddleware = (req, res, next) => {
+  const id = parseInt(req.params.id);
 
-  const { error } = schema.validate(req.body);
-  if (error) {
-    return res
-      .status(400)
-      .json({ ok: false, message: error.details[0].message });
+  if (isNaN(id) || id <= 0) {
+    return res.status(400).json({
+      success: false,
+      mensaje: "ID inválido",
+    });
   }
+
+  req.params.id = id;
   next();
+};
+
+export default {
+  validarRegistroMiddleware,
+  validarCitaMiddleware,
+  validarServicioMiddleware,
+  validarIdMiddleware,
 };

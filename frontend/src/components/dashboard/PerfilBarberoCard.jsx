@@ -1,5 +1,4 @@
 // frontend/src/components/dashboard/PerfilBarberoCard.jsx
-
 import React, { useState, useEffect } from "react";
 import {
   Scissors,
@@ -15,53 +14,24 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { getPerfilBarbero } from "../../services/usuarioService";
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
 
-/* ─── helpers ─── */
 const fmtPrecio = (n) =>
   Number(n).toLocaleString("es-CO", {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
   });
+const tasaExito = (completadas, total) =>
+  total && total > 0
+    ? Math.round((Number(completadas) / Number(total)) * 100)
+    : 0;
 
-const tasaExito = (completadas, total) => {
-  if (!total || total === 0) return 0;
-  return Math.round((Number(completadas) / Number(total)) * 100);
-};
-
-/* ─── Skeleton ─── */
-function Skeleton() {
-  return (
-    <div className="animate-pulse space-y-4">
-      <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
-      <div className="space-y-2 px-1">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
-        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-16 bg-gray-200 dark:bg-gray-700 rounded-xl"
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Stat chip ─── */
 function Stat({ label, value, sub, accent }) {
   return (
     <div
-      className={`
-        rounded-xl px-3 py-3 text-center
-        ${
-          accent
-            ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40"
-            : "bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-white/5"
-        }
-      `}
+      className={`rounded-xl px-3 py-3 text-center ${accent ? "bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40" : "bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-white/5"}`}
     >
       <p
         className={`text-xl font-bold leading-none ${accent ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}
@@ -82,19 +52,13 @@ function Stat({ label, value, sub, accent }) {
   );
 }
 
-/* ─── Servicio frecuente ─── */
 function ServicioRow({ servicio, index }) {
   return (
     <div
       className="flex items-center gap-3 py-2.5 border-b border-gray-100 dark:border-white/5 last:border-0"
       style={{ animationDelay: `${index * 60}ms` }}
     >
-      <span
-        className="
-          w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
-          bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400
-        "
-      >
+      <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
         {index + 1}
       </span>
       <div className="flex-1 min-w-0">
@@ -115,10 +79,9 @@ function ServicioRow({ servicio, index }) {
   );
 }
 
-/* ─── Componente principal ─── */
 export default function PerfilBarberoCard({
   barberoId,
-  onReservar, // callback opcional: botón "Reservar con este barbero"
+  onReservar,
   soloLectura = false,
 }) {
   const [data, setData] = useState(null);
@@ -146,27 +109,8 @@ export default function PerfilBarberoCard({
   }, [barberoId]);
 
   if (!barberoId) return null;
-
-  if (loading)
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5">
-        <Skeleton />
-      </div>
-    );
-
-  if (error)
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-red-100 dark:border-red-900/30 flex flex-col items-center gap-3 text-center">
-        <AlertTriangle size={24} className="text-red-400" />
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        <button
-          onClick={cargar}
-          className="flex items-center gap-1.5 text-xs text-amber-500 hover:text-amber-600 transition-colors"
-        >
-          <RefreshCw size={12} /> Reintentar
-        </button>
-      </div>
-    );
+  if (loading) return <Spinner />;
+  if (error) return <ErrorBanner message={error} onRetry={cargar} />;
 
   const { nombre, email, telefono, estadisticas, servicios_frecuentes } = data;
   const exito = tasaExito(
@@ -177,9 +121,7 @@ export default function PerfilBarberoCard({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
-      {/* ── Hero ── */}
       <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 px-6 pt-6 pb-8">
-        {/* Patrón decorativo */}
         <div
           className="absolute inset-0 opacity-5"
           style={{
@@ -188,22 +130,17 @@ export default function PerfilBarberoCard({
             backgroundSize: "12px 12px",
           }}
         />
-
         <div className="relative flex items-center gap-4">
-          {/* Avatar */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-900/30">
               <span className="text-2xl font-bold text-gray-900">
                 {inicial}
               </span>
             </div>
-            {/* Badge de tijeras */}
             <div className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center shadow">
               <Scissors size={11} className="text-gray-900" />
             </div>
           </div>
-
-          {/* Nombre y contacto */}
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold text-white leading-tight truncate">
               {nombre}
@@ -227,8 +164,6 @@ export default function PerfilBarberoCard({
             </div>
           </div>
         </div>
-
-        {/* Tasa de éxito visual */}
         <div className="relative mt-4">
           <div className="flex justify-between items-center mb-1">
             <span className="text-xs text-white/50 flex items-center gap-1">
@@ -245,7 +180,6 @@ export default function PerfilBarberoCard({
         </div>
       </div>
 
-      {/* ── Estadísticas ── */}
       <div className="px-5 pt-5 pb-4">
         <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
           <BarChart3 size={12} /> Estadísticas
@@ -277,7 +211,6 @@ export default function PerfilBarberoCard({
         </div>
       </div>
 
-      {/* ── Servicios frecuentes ── */}
       {servicios_frecuentes?.length > 0 && (
         <div className="px-5 pb-5">
           <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -291,22 +224,13 @@ export default function PerfilBarberoCard({
         </div>
       )}
 
-      {/* ── CTA reservar ── */}
       {!soloLectura && onReservar && (
         <div className="px-5 pb-5">
           <button
             onClick={onReservar}
-            className="
-              w-full flex items-center justify-center gap-2
-              bg-amber-400 hover:bg-amber-300 active:bg-amber-500
-              text-gray-900 font-bold text-sm
-              py-3 rounded-xl
-              transition-colors duration-150
-              shadow-sm shadow-amber-200 dark:shadow-amber-900/20
-            "
+            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-gray-900 font-bold text-sm py-3 rounded-xl transition-colors duration-150 shadow-sm shadow-amber-200 dark:shadow-amber-900/20"
           >
-            Reservar con {nombre?.split(" ")[0]}
-            <ChevronRight size={16} />
+            Reservar con {nombre?.split(" ")[0]} <ChevronRight size={16} />
           </button>
         </div>
       )}

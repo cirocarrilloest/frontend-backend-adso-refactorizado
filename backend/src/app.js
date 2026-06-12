@@ -1,54 +1,51 @@
-// backend/src/app.js
-import express from "express"; //Importa Express para crear el servidor
-import cors from "cors"; //Importa CORS para manejar las políticas de seguridad de las solicitudes HTTP
-import morgan from "morgan"; //Importa Morgan para registrar las solicitudes HTTP en la consola
-import chalk from "chalk"; //Importa Chalk para colorear los mensajes en la consola
-import clear from "clear"; //Importa Clear para limpiar la consola al iniciar la aplicación
-import dotenv from "dotenv"; //Importa Dotenv para cargar las variables de entorno desde un archivo .env
-//Importa la función para conectar a la base de datos y las rutas de autenticación
+// src/app.js
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import chalk from "chalk";
+import clear from "clear";
+import dotenv from "dotenv";
+
 import { connectDB } from "./config/db.js";
-import authRoutes from "./routes/authRoutes.js"; //Importa el modelo de usuario para manejar las operaciones relacionadas con los usuarios
+import { cargarConfiguracion } from "./middlewares/configMiddleware.js";
+import { startExpiredAppointmentsJob } from "./jobs/cleanExpiredAppointments.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
+
+// Rutas
+import authRoutes from "./routes/authRoutes.js";
 import citaRoutes from "./routes/citaRoutes.js";
 import servicioRoutes from "./routes/servicioRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import configRoutes from "./routes/configRoutes.js";
 import contactoRoutes from "./routes/contactoRoutes.js";
 import notificacionRoutes from "./routes/notificacionRoutes.js";
-import { cargarConfiguracion } from "./middlewares/configMiddleware.js";
-import { startExpiredAppointmentsJob } from "./jobs/cleanExpiredAppointments.js";
-dotenv.config(); //Carga las variables de entorno desde el archivo .env
 
-const app = express(); //Crea una instancia de Express para configurar el servidor
+dotenv.config();
 
-// Limpiar consola al iniciar
+const app = express();
 clear();
 
-// Función principal
 const startApp = async () => {
   try {
-    // Conectar a la base de datos
     await connectDB();
-    // Si la conexión es exitosa, se muestra un mensaje en la consola
-    console.log(chalk.green("Base de datos conectada"));
+    console.log(chalk.green("✓ Base de datos conectada"));
 
-    // Iniciar job para limpiar citas vencidas
+    // Iniciar job de limpieza
     startExpiredAppointmentsJob();
+
     // Middlewares básicos
     app.use(
       cors({
-        origin: "http://localhost:5173",
+        origin: process.env.FRONTEND_URL || "http://localhost:5173",
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization"],
       }),
-    ); //Habilita CORS para permitir solicitudes desde diferentes orígenes
-    app.use(express.json()); //Habilita el análisis de JSON en las solicitudes entrantes
-    app.use(express.urlencoded({ extended: true })); //Habilita el análisis de datos codificados en URL en las solicitudes entrantes
-
-    // Logs HTTP (peticiones)
+    );
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
     app.use(morgan("dev"));
 
-    // MIDDLEWARE DE CONFIGURACIÓN - Carga la configuración para todas las rutas
-    // Debe ir ANTES de las rutas que necesitan acceder a req.config
+    // Middleware de configuración global
     app.use(cargarConfiguracion);
 
     // Rutas
@@ -60,48 +57,38 @@ const startApp = async () => {
     app.use("/api/contacto", contactoRoutes);
     app.use("/api/notificaciones", notificacionRoutes);
 
-    // Ruta no encontrada
+    // Ruta no encontrada - 404
     app.use((req, res) => {
       res.status(404).json({
-        //Maneja las rutas no encontradas y devuelve un error 404
         ok: false,
-        message: "ruta no encontrada",
+        message: `Ruta no encontrada: ${req.method} ${req.url}`,
       });
     });
 
-    // Middleware global de errores
-    app.use((err, req, res, next) => {
-      //Maneja los errores que ocurren en cualquier parte de la aplicación
-      console.error(chalk.red("Error:"), err.message); //Registra el error en la consola con un mensaje en rojo
-      console.error(chalk.red("Stack:"), err.stack); //Mejor: mostrar stack trace para debugging
-
-      // Error general → 500
-      res.status(500).json({
-        ok: false,
-        message: "error interno del servidor",
-      });
-    });
+    // MIDDLEWARE DE ERROR GLOBAL (DEBE IR AL FINAL)
+    app.use(errorHandler);
 
     // Iniciar servidor
     const PORT = process.env.PORT || 3000;
-
     app.listen(PORT, () => {
-      //Inicia el servidor en el puerto especificado y muestra un mensaje en la consola con la URL y el entorno de ejecución
       console.log(
         chalk.blue(`
-    Servidor iniciado correctamente
-    Puerto: ${PORT}
-    URL: http://localhost:${PORT}
-    Entorno: ${process.env.NODE_ENV || "development"}
+╔════════════════════════════════════════════╗
+║     🚀 Servidor iniciado correctamente     ║
+╠════════════════════════════════════════════╣
+║  Puerto: ${PORT}
+║  URL: http://localhost:${PORT}
+║  Entorno: ${process.env.NODE_ENV || "development"}
+╚════════════════════════════════════════════╝
       `),
       );
     });
   } catch (error) {
-    //Si ocurre un error durante la conexión a la base de datos o la configuración del servidor, se muestra un mensaje de error en la consola y se detiene la aplicación
-    console.error(chalk.red("Error al iniciar la app:"), error.message);
+    console.error(chalk.red("❌ Error al iniciar la app:"), error.message);
     process.exit(1);
   }
 };
 
-// Ejecutar app
 startApp();
+
+export default app;

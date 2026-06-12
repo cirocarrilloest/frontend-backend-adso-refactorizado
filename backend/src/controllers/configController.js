@@ -1,115 +1,87 @@
 // backend/src/controllers/configController.js
-import {
-  getAllConfig,
-  getConfigByKey,
-  setConfig,
-  setManyConfig,
-} from "../models/configModel.js";
+import { configRepository } from "../repositories/configRepository.js";
+import { ok, notFound, badRequest } from "../utils/responseUtils.js";
+import { invalidarCacheConfig } from "../middlewares/configMiddleware.js";
 
-// Obtener toda la configuración
-export const getConfiguracion = async (req, res) => {
+export const getConfiguracion = async (req, res, next) => {
   try {
-    const config = await getAllConfig();
-    res.json({
-      ok: true,
-      configuracion: config,
-    });
+    const config = await configRepository.getAll();
+    return ok(res, { configuracion: config });
   } catch (error) {
-    console.error("Error al obtener configuración:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Obtener una configuración específica
-export const getConfigByKeyController = async (req, res) => {
+export const getConfigByKeyController = async (req, res, next) => {
   try {
     const { key } = req.params;
-    const config = await getConfigByKey(key);
+    const config = await configRepository.getByKey(key);
 
     if (!config) {
-      return res.status(404).json({
-        ok: false,
-        message: "Clave de configuración no encontrada",
-      });
+      return notFound(res, "Clave de configuración no encontrada");
     }
 
-    res.json({
-      ok: true,
-      configuracion: config,
-    });
+    return ok(res, { configuracion: config });
   } catch (error) {
-    console.error("Error al obtener configuración:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Actualizar una configuración
-export const updateConfig = async (req, res) => {
+export const updateConfig = async (req, res, next) => {
   try {
     const { key } = req.params;
     const { valor } = req.body;
 
     if (valor === undefined) {
-      return res.status(400).json({
-        ok: false,
-        message: "Se requiere el campo 'valor'",
-      });
+      return badRequest(res, 'Se requiere el campo "valor"');
     }
 
-    const configActualizada = await setConfig(key, valor);
+    const configActualizada = await configRepository.set(key, valor);
 
     if (!configActualizada) {
-      return res.status(404).json({
-        ok: false,
-        message: "Clave de configuración no encontrada",
-      });
+      return notFound(res, "Clave de configuración no encontrada");
     }
 
-    res.json({
-      ok: true,
+    // Invalidar caché
+    invalidarCacheConfig(req.app);
+
+    return ok(res, {
       message: "Configuración actualizada exitosamente",
       configuracion: configActualizada,
     });
   } catch (error) {
-    console.error("Error al actualizar configuración:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Actualizar múltiples configuraciones
-export const updateMultipleConfig = async (req, res) => {
+export const updateMultipleConfig = async (req, res, next) => {
   try {
     const { configuraciones } = req.body;
 
     if (!configuraciones || typeof configuraciones !== "object") {
-      return res.status(400).json({
-        ok: false,
-        message:
-          "Se requiere un objeto 'configuraciones' con las claves y valores a actualizar",
-      });
+      return badRequest(
+        res,
+        'Se requiere un objeto "configuraciones" con las claves y valores a actualizar',
+      );
     }
 
-    const configActualizada = await setManyConfig(configuraciones);
+    const configActualizada = await configRepository.setMany(configuraciones);
 
-    res.json({
-      ok: true,
+    // Invalidar caché
+    invalidarCacheConfig(req.app);
+
+    return ok(res, {
       message: "Configuraciones actualizadas exitosamente",
       configuracion: configActualizada,
     });
   } catch (error) {
-    console.error("Error al actualizar configuraciones:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
+};
+
+export default {
+  getConfiguracion,
+  getConfigByKeyController,
+  updateConfig,
+  updateMultipleConfig,
 };

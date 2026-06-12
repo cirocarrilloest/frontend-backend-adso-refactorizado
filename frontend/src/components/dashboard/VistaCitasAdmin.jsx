@@ -1,6 +1,4 @@
 // frontend/src/components/dashboard/VistaCitasAdmin.jsx
-//
-
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   RefreshCw,
@@ -27,11 +25,10 @@ import { getUsuarios } from "../../services/usuarioService";
 import DrawerDetalleCita from "./DrawerDetalleCita";
 import WidgetDisponibilidad from "./WidgetDisponibilidad";
 import { useConfig } from "../../context/ConfigContext";
-
-// helpers
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
 
 const ESTADOS = ["todos", "pendiente", "confirmada", "completada", "cancelada"];
-
 const ESTADO_CFG = {
   pendiente: {
     label: "Pendiente",
@@ -58,21 +55,19 @@ const ESTADO_CFG = {
     Icon: XCircle,
   },
 };
-
-const fmtFecha = (raw) => {
-  if (!raw) return "—";
-  const d = new Date(String(raw).includes("T") ? raw : `${raw}T12:00:00`);
-  return d.toLocaleDateString("es-CO", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
-
+const fmtFecha = (raw) =>
+  raw
+    ? new Date(
+        String(raw).includes("T") ? raw : `${raw}T12:00:00`,
+      ).toLocaleDateString("es-CO", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 const fmtHora = (raw) => String(raw || "").slice(0, 5);
 
-// Columnas para ordenamiento
 const COLS = [
   { key: "fecha", label: "Fecha" },
   { key: "hora", label: "Hora" },
@@ -82,53 +77,12 @@ const COLS = [
   { key: "estado", label: "Estado" },
 ];
 
-// sub-componentes
-
-function Spinner({ msg = "Cargando…" }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <RefreshCw size={22} className="animate-spin text-amber-400" />
-      <p className="text-xs text-gray-400">{msg}</p>
-    </div>
-  );
-}
-
-function EmptyState({ sinBarbero }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
-        {sinBarbero ? (
-          <User size={28} className="text-gray-400" />
-        ) : (
-          <Calendar size={28} className="text-gray-400" />
-        )}
-      </div>
-      <p className="font-semibold text-gray-700 dark:text-gray-300">
-        {sinBarbero ? "Selecciona un barbero" : "Sin citas para este filtro"}
-      </p>
-      <p className="text-xs text-gray-400 max-w-xs">
-        {sinBarbero
-          ? "Elige un barbero del selector para ver sus citas."
-          : "Intenta cambiar el filtro de estado o la fecha."}
-      </p>
-    </div>
-  );
-}
-
 function EstadoChip({ estado, activo, count, onClick }) {
   const cfg = estado ? ESTADO_CFG[estado] : null;
   return (
     <button
       onClick={onClick}
-      className={`
-        flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
-        border transition-all whitespace-nowrap
-        ${
-          activo
-            ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm"
-            : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-amber-300"
-        }
-      `}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all whitespace-nowrap ${activo ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-amber-300"}`}
     >
       {cfg ? (
         <>
@@ -151,56 +105,6 @@ function EstadoChip({ estado, activo, count, onClick }) {
   );
 }
 
-// Tarjeta de mini-estadísticas del barbero seleccionado
-function StatsBar({ citas, formatearPrecio }) {
-  const cnt = citas.reduce((a, c) => {
-    a[c.estado] = (a[c.estado] || 0) + 1;
-    return a;
-  }, {});
-  const ingresos = citas
-    .filter((c) => c.estado === "completada")
-    .reduce((s, c) => s + Number(c.precio || 0), 0);
-
-  const items = [
-    { label: "Total", val: citas.length, cls: "text-gray-900 dark:text-white" },
-    {
-      label: "Pendientes",
-      val: cnt.pendiente || 0,
-      cls: "text-amber-600 dark:text-amber-400",
-    },
-    {
-      label: "Confirmadas",
-      val: cnt.confirmada || 0,
-      cls: "text-blue-600 dark:text-blue-400",
-    },
-    {
-      label: "Completadas",
-      val: cnt.completada || 0,
-      cls: "text-green-600 dark:text-green-400",
-    },
-    {
-      label: "Ingresos",
-      val: formatearPrecio(ingresos),
-      cls: "text-green-700 dark:text-green-300",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-5 gap-2">
-      {items.map((s) => (
-        <div
-          key={s.label}
-          className="bg-white dark:bg-gray-800 rounded-xl p-3 text-center border border-gray-100 dark:border-white/5 shadow-sm"
-        >
-          <p className={`text-lg font-bold leading-tight ${s.cls}`}>{s.val}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Cabecera de columna ordenable
 function ColHeader({ col, ordenCol, ordenDir, onClick }) {
   const activo = ordenCol === col.key;
   return (
@@ -224,11 +128,9 @@ function ColHeader({ col, ordenCol, ordenDir, onClick }) {
   );
 }
 
-// Fila de cita en la tabla
 function FilaCita({ cita, onClick, formatearPrecio }) {
   const cfg = ESTADO_CFG[cita.estado] || ESTADO_CFG.cancelada;
   const Icon = cfg.Icon;
-
   return (
     <tr
       role="button"
@@ -237,7 +139,6 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
       onKeyDown={(e) => e.key === "Enter" && onClick(cita.id)}
       className="group border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer hover:bg-amber-50/50 dark:hover:bg-amber-900/5 transition-colors outline-none focus-visible:bg-amber-50 dark:focus-visible:bg-amber-900/10"
     >
-      {/* Fecha */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <Calendar size={12} className="text-gray-400 flex-shrink-0" />
@@ -246,7 +147,6 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
           </span>
         </div>
       </td>
-      {/* Hora */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <Clock size={12} className="text-gray-400 flex-shrink-0" />
@@ -255,7 +155,6 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
           </span>
         </div>
       </td>
-      {/* Cliente */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 flex-shrink-0">
@@ -271,7 +170,6 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
           </div>
         </div>
       </td>
-      {/* Servicio */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <Scissors size={12} className="text-gray-400 flex-shrink-0" />
@@ -281,13 +179,11 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
         </div>
         <p className="text-xs text-gray-400 pl-4 mt-0.5">{cita.duracion} min</p>
       </td>
-      {/* Precio */}
       <td className="px-4 py-3.5">
         <span className="text-sm font-bold text-gray-900 dark:text-white">
           {formatearPrecio(cita.precio)}
         </span>
       </td>
-      {/* Estado */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <span
@@ -298,7 +194,6 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
           </span>
         </div>
       </td>
-      {/* Flecha */}
       <td className="px-3 py-3.5">
         <ChevronRight
           size={14}
@@ -309,42 +204,68 @@ function FilaCita({ cita, onClick, formatearPrecio }) {
   );
 }
 
-// Componente principal
-export default function VistaCitasAdmin() {
-  // Usar el hook de configuración
-  const {
-    formatearPrecio,
-    estaEnHorarioLaboral,
-    esDiaLaborable,
-    loading: configLoading,
-  } = useConfig();
+function StatsBar({ citas, formatearPrecio }) {
+  const cnt = citas.reduce((a, c) => {
+    a[c.estado] = (a[c.estado] || 0) + 1;
+    return a;
+  }, {});
+  const ingresos = citas
+    .filter((c) => c.estado === "completada")
+    .reduce((s, c) => s + Number(c.precio || 0), 0);
+  const items = [
+    { label: "Total", val: citas.length, cls: "text-gray-900 dark:text-white" },
+    {
+      label: "Pendientes",
+      val: cnt.pendiente || 0,
+      cls: "text-amber-600 dark:text-amber-400",
+    },
+    {
+      label: "Confirmadas",
+      val: cnt.confirmada || 0,
+      cls: "text-blue-600 dark:text-blue-400",
+    },
+    {
+      label: "Completadas",
+      val: cnt.completada || 0,
+      cls: "text-green-600 dark:text-green-400",
+    },
+    {
+      label: "Ingresos",
+      val: formatearPrecio(ingresos),
+      cls: "text-green-700 dark:text-green-300",
+    },
+  ];
+  return (
+    <div className="grid grid-cols-5 gap-2">
+      {items.map((s) => (
+        <div
+          key={s.label}
+          className="bg-white dark:bg-gray-800 rounded-xl p-3 text-center border border-gray-100 dark:border-white/5 shadow-sm"
+        >
+          <p className={`text-lg font-bold leading-tight ${s.cls}`}>{s.val}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-  // Barberos
+export default function VistaCitasAdmin() {
+  const { formatearPrecio, loading: configLoading } = useConfig();
   const [barberos, setBarberos] = useState([]);
   const [cargandoBarberos, setCargandoBarberos] = useState(true);
-
-  // Selección
   const [barberoId, setBarberoId] = useState(null);
   const [fechaFiltro, setFechaFiltro] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
-
-  // Estado para mostrar/ocultar el widget de disponibilidad
   const [mostrarDisponibilidad, setMostrarDisponibilidad] = useState(false);
-
-  // Datos
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // Ordenamiento
   const [ordenCol, setOrdenCol] = useState("fecha");
   const [ordenDir, setOrdenDir] = useState("desc");
-
-  // Drawer
   const [citaIdDetalle, setCitaIdDetalle] = useState(null);
 
-  // cargar barberos al montar
   useEffect(() => {
     (async () => {
       try {
@@ -360,7 +281,6 @@ export default function VistaCitasAdmin() {
     })();
   }, []);
 
-  // cargar citas cuando cambia barbero o fecha
   const cargar = useCallback(async () => {
     if (!barberoId) return;
     setLoading(true);
@@ -381,7 +301,6 @@ export default function VistaCitasAdmin() {
     cargar();
   }, [cargar]);
 
-  // ordenar columna
   const toggleOrden = (col) => {
     if (ordenCol === col) setOrdenDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -390,15 +309,10 @@ export default function VistaCitasAdmin() {
     }
   };
 
-  // filtrar + ordenar
   const citasProcesadas = useMemo(() => {
     let lista = [...citas];
-
-    // Estado
     if (filtroEstado !== "todos")
       lista = lista.filter((c) => c.estado === filtroEstado);
-
-    // Búsqueda libre
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase();
       lista = lista.filter(
@@ -408,11 +322,9 @@ export default function VistaCitasAdmin() {
           c.servicio_nombre?.toLowerCase().includes(q),
       );
     }
-
-    // Ordenar
     lista.sort((a, b) => {
-      let va = a[ordenCol] ?? "";
-      let vb = b[ordenCol] ?? "";
+      let va = a[ordenCol] ?? "",
+        vb = b[ordenCol] ?? "";
       if (ordenCol === "precio") {
         va = Number(va);
         vb = Number(vb);
@@ -424,11 +336,9 @@ export default function VistaCitasAdmin() {
       if (va > vb) return ordenDir === "asc" ? 1 : -1;
       return 0;
     });
-
     return lista;
   }, [citas, filtroEstado, busqueda, ordenCol, ordenDir]);
 
-  // Conteo por estado (sobre datos sin filtrar)
   const conteo = useMemo(() => {
     const acc = { todos: citas.length };
     citas.forEach((c) => {
@@ -437,46 +347,28 @@ export default function VistaCitasAdmin() {
     return acc;
   }, [citas]);
 
-  // Barbero seleccionado
   const barberoActual = barberos.find((b) => b.id === barberoId);
-
-  // Sincronizar cambio desde drawer
   const handleAccionDetalle = (citaActualizada) => {
-    if (!citaActualizada) return;
-    setCitas((prev) =>
-      prev.map((c) =>
-        c.id === citaActualizada.id
-          ? { ...c, estado: citaActualizada.estado }
-          : c,
-      ),
-    );
+    if (citaActualizada)
+      setCitas((prev) =>
+        prev.map((c) =>
+          c.id === citaActualizada.id
+            ? { ...c, estado: citaActualizada.estado }
+            : c,
+        ),
+      );
   };
+  const ingresosFiltrados = citasProcesadas
+    .filter((c) => c.estado === "completada")
+    .reduce((s, c) => s + Number(c.precio || 0), 0);
 
-  // Calcular ingresos totales filtrados
-  const ingresosFiltrados = useMemo(() => {
-    return citasProcesadas
-      .filter((c) => c.estado === "completada")
-      .reduce((s, c) => s + Number(c.precio || 0), 0);
-  }, [citasProcesadas]);
-
-  // Mostrar loading mientras carga la configuración
-  if (configLoading) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
-        <div className="px-5 py-16 flex items-center justify-center">
-          <RefreshCw size={24} className="animate-spin text-amber-400" />
-        </div>
-      </div>
-    );
-  }
+  if (configLoading) return <Spinner />;
 
   return (
     <>
       <div className="space-y-4">
-        {/* Selector de barbero + filtro de fecha */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
-            {/* Selector barbero */}
             <div className="flex-1 min-w-0">
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                 Barbero
@@ -495,18 +387,10 @@ export default function VistaCitasAdmin() {
                           setFiltroEstado("todos");
                           setBusqueda("");
                         }}
-                        className={`
-                          flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all
-                          ${
-                            activo
-                              ? "bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900 shadow-sm"
-                              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-white/30"
-                          }
-                        `}
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${activo ? "bg-gray-900 dark:bg-white border-gray-900 dark:border-white text-white dark:text-gray-900 shadow-sm" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-white/30"}`}
                       >
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                          ${activo ? "bg-amber-400 text-gray-900" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activo ? "bg-amber-400 text-gray-900" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
                         >
                           {b.nombre?.charAt(0)?.toUpperCase()}
                         </div>
@@ -517,8 +401,6 @@ export default function VistaCitasAdmin() {
                 </div>
               )}
             </div>
-
-            {/* Filtro de fecha */}
             <div className="flex-shrink-0">
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                 Filtrar por fecha
@@ -541,8 +423,6 @@ export default function VistaCitasAdmin() {
                 )}
               </div>
             </div>
-
-            {/* Recargar */}
             <button
               onClick={cargar}
               disabled={!barberoId || loading}
@@ -555,8 +435,6 @@ export default function VistaCitasAdmin() {
               />
             </button>
           </div>
-
-          {/* Info barbero activo */}
           {barberoActual && !cargandoBarberos && (
             <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/5 flex items-center gap-2">
               <BarChart3 size={13} className="text-amber-500" />
@@ -579,42 +457,34 @@ export default function VistaCitasAdmin() {
           )}
         </div>
 
-        {/* Sin barbero seleccionado */}
-        {!barberoId && !cargandoBarberos && <EmptyState sinBarbero />}
-
-        {/* Loading inicial */}
-        {loading && (
-          <Spinner
-            msg={`Cargando citas de ${barberoActual?.nombre || "barbero"}…`}
-          />
-        )}
-
-        {/* Error*/}
-        {!loading && error && (
-          <div className="flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 px-5 py-4 rounded-2xl text-sm">
-            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-            <span>{error}</span>
+        {!barberoId && !cargandoBarberos && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
+              <User size={28} className="text-gray-400" />
+            </div>
+            <p className="font-semibold text-gray-700 dark:text-gray-300">
+              Selecciona un barbero
+            </p>
+            <p className="text-xs text-gray-400 max-w-xs">
+              Elige un barbero del selector para ver sus citas.
+            </p>
           </div>
         )}
+        {loading && <Spinner />}
+        {!loading && error && <ErrorBanner message={error} onRetry={cargar} />}
 
-        {/* Contenido principal*/}
         {!loading && !error && barberoId && (
           <>
-            {/* Mini stats + Botón toggle disponibilidad + Widget */}
             <StatsBar citas={citas} formatearPrecio={formatearPrecio} />
-
-            {/* Toggle verificar disponibilidad */}
             <button
               onClick={() => setMostrarDisponibilidad((v) => !v)}
-              className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400
-                         hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
+              className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
             >
               <Zap size={13} />
               {mostrarDisponibilidad
                 ? "Ocultar verificador"
                 : "Verificar disponibilidad"}
             </button>
-
             {mostrarDisponibilidad && (
               <WidgetDisponibilidad
                 showBarberoSelector={false}
@@ -623,7 +493,6 @@ export default function VistaCitasAdmin() {
               />
             )}
 
-            {/* Filtros de estado + búsqueda */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1">
                 {ESTADOS.map((e) => (
@@ -659,12 +528,20 @@ export default function VistaCitasAdmin() {
               </div>
             </div>
 
-            {/* Tabla */}
             {citasProcesadas.length === 0 ? (
-              <EmptyState sinBarbero={false} />
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
+                  <Calendar size={28} className="text-gray-400" />
+                </div>
+                <p className="font-semibold text-gray-700 dark:text-gray-300">
+                  Sin citas para este filtro
+                </p>
+                <p className="text-xs text-gray-400 max-w-xs">
+                  Intenta cambiar el filtro de estado o la fecha.
+                </p>
+              </div>
             ) : (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
-                {/* Cabecera con total */}
                 <div className="px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Filter size={13} className="text-amber-500" />
@@ -679,8 +556,6 @@ export default function VistaCitasAdmin() {
                     Clic en una fila para ver detalle y gestionar
                   </p>
                 </div>
-
-                {/* Tabla responsive */}
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[720px]">
                     <thead className="bg-gray-50 dark:bg-gray-700/40">
@@ -709,8 +584,6 @@ export default function VistaCitasAdmin() {
                     </tbody>
                   </table>
                 </div>
-
-                {/* Pie con totales rápidos */}
                 <div className="px-5 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
                   <p className="text-xs text-gray-400">
                     {citasProcesadas.length} de {citas.length} citas
@@ -728,8 +601,6 @@ export default function VistaCitasAdmin() {
           </>
         )}
       </div>
-
-      {/* Drawer detalle — rol admin puede confirmar/cancelar/finalizar */}
       <DrawerDetalleCita
         citaId={citaIdDetalle}
         onClose={() => setCitaIdDetalle(null)}

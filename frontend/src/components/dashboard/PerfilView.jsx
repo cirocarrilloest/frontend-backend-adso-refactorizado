@@ -8,39 +8,16 @@ import {
   cambiarPassword,
 } from "../../services/usuarioService";
 import EliminarCuenta from "./EliminarCuenta";
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-8">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-400"></div>
-    </div>
-  );
-}
-
-function ErrorBanner({ msg }) {
-  if (!msg) return null;
-  return (
-    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-      <span>⚠️</span> {msg}
-    </div>
-  );
-}
-
-function SuccessBanner({ msg }) {
-  if (!msg) return null;
-  return (
-    <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg text-sm">
-      <span>✓</span> {msg}
-    </div>
-  );
-}
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
+import { useToast } from "../../context/ToastContext";
 
 export default function PerfilView() {
   const { usuario, guardarSesion } = useAuth();
+  const { addToast } = useToast();
   const [perfil, setPerfil] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Estados para edición
   const [editando, setEditando] = useState(false);
   const [formData, setFormData] = useState({
     nombre: "",
@@ -48,10 +25,6 @@ export default function PerfilView() {
     telefono: "",
   });
   const [editLoading, setEditLoading] = useState(false);
-  const [editError, setEditError] = useState(null);
-  const [editSuccess, setEditSuccess] = useState(null);
-
-  // Estados para cambio de contraseña
   const [mostrarCambioPass, setMostrarCambioPass] = useState(false);
   const [passData, setPassData] = useState({
     pass_actual: "",
@@ -60,9 +33,7 @@ export default function PerfilView() {
   });
   const [passLoading, setPassLoading] = useState(false);
   const [passError, setPassError] = useState(null);
-  const [passSuccess, setPassSuccess] = useState(null);
 
-  // Cargar perfil
   const cargarPerfil = async () => {
     setLoading(true);
     setError(null);
@@ -87,70 +58,55 @@ export default function PerfilView() {
     cargarPerfil();
   }, []);
 
-  // Manejar cambio en formulario de edición
   const handleEditChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    setEditError(null);
-    setEditSuccess(null);
   };
 
-  // Guardar cambios del perfil
   const handleGuardarPerfil = async () => {
-    // Validaciones
     if (!formData.nombre.trim()) {
-      setEditError("El nombre es requerido");
+      addToast("El nombre es requerido", "error");
       return;
     }
     if (!formData.email.trim()) {
-      setEditError("El email es requerido");
+      addToast("El email es requerido", "error");
       return;
     }
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      setEditError("El email no es válido");
+      addToast("El email no es válido", "error");
       return;
     }
 
     setEditLoading(true);
-    setEditError(null);
-    setEditSuccess(null);
-
     try {
       const response = await updateMiPerfil({
         nombre: formData.nombre,
         email: formData.email,
         telefono: formData.telefono,
       });
-
-      setEditSuccess("Perfil actualizado exitosamente");
+      addToast("Perfil actualizado exitosamente", "success");
       setPerfil(response.usuario);
-
-      // Actualizar contexto de autenticación
       guardarSesion(localStorage.getItem("token"), response.usuario);
-
-      // Cerrar edición después de 1.5 segundos
       setTimeout(() => {
         setEditando(false);
-        setEditSuccess(null);
       }, 1500);
     } catch (err) {
-      setEditError(err.response?.data?.message || "Error al actualizar perfil");
+      addToast(
+        err.response?.data?.message || "Error al actualizar perfil",
+        "error",
+      );
     } finally {
       setEditLoading(false);
     }
   };
 
-  // Manejar cambio en formulario de contraseña
   const handlePassChange = (e) => {
     const { name, value } = e.target;
     setPassData((prev) => ({ ...prev, [name]: value }));
     setPassError(null);
-    setPassSuccess(null);
   };
 
-  // Cambiar contraseña
   const handleCambiarPassword = async () => {
-    // Validaciones
     if (!passData.pass_actual) {
       setPassError("Ingresa tu contraseña actual");
       return;
@@ -169,29 +125,21 @@ export default function PerfilView() {
     }
 
     setPassLoading(true);
-    setPassError(null);
-    setPassSuccess(null);
-
     try {
       await cambiarPassword({
         pass_actual: passData.pass_actual,
         pass_nueva: passData.pass_nueva,
       });
-
-      setPassSuccess("Contraseña actualizada exitosamente");
-      setPassData({
-        pass_actual: "",
-        pass_nueva: "",
-        pass_confirmar: "",
-      });
-
-      setTimeout(() => {
-        setMostrarCambioPass(false);
-        setPassSuccess(null);
-      }, 2000);
+      addToast("Contraseña actualizada exitosamente", "success");
+      setPassData({ pass_actual: "", pass_nueva: "", pass_confirmar: "" });
+      setTimeout(() => setMostrarCambioPass(false), 2000);
     } catch (err) {
       setPassError(
         err.response?.data?.message || "Error al cambiar contraseña",
+      );
+      addToast(
+        err.response?.data?.message || "Error al cambiar contraseña",
+        "error",
       );
     } finally {
       setPassLoading(false);
@@ -199,13 +147,11 @@ export default function PerfilView() {
   };
 
   if (loading) return <Spinner />;
-  if (error) return <ErrorBanner msg={error} />;
+  if (error) return <ErrorBanner message={error} onRetry={cargarPerfil} />;
 
   return (
     <div className="space-y-5">
-      {/* Tarjeta de perfil */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
-        {/* Header con gradiente */}
         <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-6">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-4">
@@ -231,15 +177,9 @@ export default function PerfilView() {
             )}
           </div>
         </div>
-
-        {/* Body */}
         <div className="p-6">
           {editando ? (
-            // Modo edición
             <div className="space-y-4">
-              <ErrorBanner msg={editError} />
-              <SuccessBanner msg={editSuccess} />
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nombre completo *
@@ -250,10 +190,8 @@ export default function PerfilView() {
                   value={formData.nombre}
                   onChange={handleEditChange}
                   className="w-full border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="Tu nombre"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Correo electrónico *
@@ -264,10 +202,8 @@ export default function PerfilView() {
                   value={formData.email}
                   onChange={handleEditChange}
                   className="w-full border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="tu@email.com"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Teléfono
@@ -278,10 +214,8 @@ export default function PerfilView() {
                   value={formData.telefono}
                   onChange={handleEditChange}
                   className="w-full border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  placeholder="+1234567890"
                 />
               </div>
-
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleGuardarPerfil}
@@ -298,8 +232,6 @@ export default function PerfilView() {
                 <button
                   onClick={() => {
                     setEditando(false);
-                    setEditError(null);
-                    setEditSuccess(null);
                     setFormData({
                       nombre: perfil?.nombre || "",
                       email: perfil?.email || "",
@@ -313,7 +245,6 @@ export default function PerfilView() {
               </div>
             </div>
           ) : (
-            // Modo visualización
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <Mail className="text-gray-500 dark:text-gray-400" size={20} />
@@ -326,7 +257,6 @@ export default function PerfilView() {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <Phone className="text-gray-500 dark:text-gray-400" size={20} />
                 <div>
@@ -342,7 +272,6 @@ export default function PerfilView() {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <Calendar
                   className="text-gray-500 dark:text-gray-400"
@@ -356,11 +285,7 @@ export default function PerfilView() {
                     {perfil?.fecha_registro
                       ? new Date(perfil.fecha_registro).toLocaleDateString(
                           "es-CO",
-                          {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          },
+                          { year: "numeric", month: "long", day: "numeric" },
                         )
                       : "Reciente"}
                   </p>
@@ -371,7 +296,6 @@ export default function PerfilView() {
         </div>
       </div>
 
-      {/* Sección de contraseña */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -389,12 +313,9 @@ export default function PerfilView() {
             </button>
           )}
         </div>
-
         {mostrarCambioPass && (
           <div className="p-6 space-y-4">
-            <ErrorBanner msg={passError} />
-            <SuccessBanner msg={passSuccess} />
-
+            {passError && <ErrorBanner message={passError} />}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Contraseña actual *
@@ -408,7 +329,6 @@ export default function PerfilView() {
                 placeholder="Ingresa tu contraseña actual"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Nueva contraseña *
@@ -422,7 +342,6 @@ export default function PerfilView() {
                 placeholder="Mínimo 6 caracteres"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Confirmar nueva contraseña *
@@ -436,7 +355,6 @@ export default function PerfilView() {
                 placeholder="Repite la nueva contraseña"
               />
             </div>
-
             <div className="flex gap-3">
               <button
                 onClick={handleCambiarPassword}
@@ -454,7 +372,6 @@ export default function PerfilView() {
                 onClick={() => {
                   setMostrarCambioPass(false);
                   setPassError(null);
-                  setPassSuccess(null);
                   setPassData({
                     pass_actual: "",
                     pass_nueva: "",

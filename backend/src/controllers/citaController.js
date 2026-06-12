@@ -1,33 +1,30 @@
 // src/controllers/citaController.js
-// VERSIÓN COMPLETA - SOLO ORQUESTACIÓN HTTP
-
-import * as citaService from "../services/citaService.js";
-import citaModel from "../models/citaModel.js";
+import clienteCitaService from "../services/clienteCitaService.js";
+import barberoCitaService from "../services/barberoCitaService.js";
+import adminCitaService from "../services/adminCitaService.js";
+import citaRepository from "../repositories/citaRepository.js";
+import { getPool } from "../config/db.js";
 import {
   ok,
   created,
   badRequest,
   forbidden,
   notFound,
-  conflict,
-  serverError,
 } from "../utils/responseUtils.js";
 
-const manejarResultado = (res, resultado, successHandler) => {
-  if (resultado?.notFound) return notFound(res, resultado.notFound);
-  if (resultado?.forbidden) return forbidden(res, resultado.forbidden);
-  if (resultado?.conflict) return conflict(res, resultado.conflict);
-  if (resultado?.error) return badRequest(res, resultado.error);
-  return successHandler(resultado);
-};
+/**
+ * Controlador de citas - Capa de presentación
+ * Responsabilidad: Validar roles, llamar al servicio correspondiente, formatear respuesta
+ */
 
-// ─── CLIENTE ────────────────────────────────────────────────────────────────
+// ============ CLIENTE ============
 
-export const agendarCita = async (req, res) => {
+export const agendarCita = async (req, res, next) => {
   try {
     if (req.usuario.rol !== "cliente" && req.usuario.rol !== "admin") {
       return forbidden(res, "Solo los clientes pueden agendar citas");
     }
+
     const { barbero_id, servicio_id, fecha, hora, notas } = req.body;
     if (!barbero_id || !servicio_id || !fecha || !hora) {
       return badRequest(
@@ -36,7 +33,7 @@ export const agendarCita = async (req, res) => {
       );
     }
 
-    const resultado = await citaService.agendarCita({
+    const cita = await clienteCitaService.agendar({
       clienteId: req.usuario.id,
       barberoId: barbero_id,
       servicioId: servicio_id,
@@ -46,286 +43,309 @@ export const agendarCita = async (req, res) => {
       clienteNombre: req.usuario.nombre,
     });
 
-    return manejarResultado(res, resultado, ({ cita }) =>
-      created(res, { message: "Cita agendada exitosamente", cita }),
-    );
+    return created(res, { message: "Cita agendada exitosamente", cita });
   } catch (error) {
-    return serverError(res, "agendarCita", error);
+    next(error);
   }
 };
 
-export const getMisCitas = async (req, res) => {
+export const getMisCitas = async (req, res, next) => {
   try {
-    const citas = await citaModel.getCitasByCliente(req.usuario.id);
+    const citas = await clienteCitaService.getMisCitas(req.usuario.id);
     return ok(res, { citas });
   } catch (error) {
-    return serverError(res, "getMisCitas", error);
+    next(error);
   }
 };
 
-export const getProximasCitas = async (req, res) => {
+export const getProximasCitas = async (req, res, next) => {
   try {
-    const citas = await citaModel.getProximasCitasByCliente(req.usuario.id);
+    const citas = await clienteCitaService.getProximasCitas(req.usuario.id);
     return ok(res, { citas, total: citas.length });
   } catch (error) {
-    return serverError(res, "getProximasCitas", error);
+    next(error);
   }
 };
 
-export const getHistorialCitas = async (req, res) => {
+export const getHistorialCitas = async (req, res, next) => {
   try {
     let limite = parseInt(req.query.limite) || 10;
-    if (limite <= 0) limite = 10;
-    if (limite > 100) limite = 100;
-    const citas = await citaModel.getHistorialCitasByCliente(
+    limite = Math.min(Math.max(limite, 1), 100);
+    const citas = await clienteCitaService.getHistorialCitas(
       req.usuario.id,
       limite,
     );
     return ok(res, { citas, total: citas.length, limite });
   } catch (error) {
-    return serverError(res, "getHistorialCitas", error);
+    next(error);
   }
 };
 
-export const getCitaById = async (req, res) => {
+export const cancelarCita = async (req, res, next) => {
   try {
-    const cita = await citaModel.getCitaById(req.params.id);
-    if (!cita) return notFound(res, "Cita no encontrada");
+    const cita = await clienteCitaService.cancelar({
+      citaId: req.params.id,
+      usuarioId: req.usuario.id,
+      usuarioNombre: req.usuario.nombre,
+    });
+    return ok(res, { message: "Cita cancelada exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const reagendarCita = async (req, res, next) => {
+  try {
+    const { fecha, hora } = req.body;
+    if (!fecha || !hora) {
+      return badRequest(res, "Se requiere fecha y hora");
+    }
+
+    const cita = await clienteCitaService.reagendar({
+      citaId: req.params.id,
+      nuevaFecha: fecha,
+      nuevaHora: hora,
+      usuarioId: req.usuario.id,
+    });
+
+    return ok(res, { message: "Cita reagendada exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCitaById = async (req, res, next) => {
+  try {
+    const cita = await citaRepository.findById(req.params.id);
+    if (!cita) {
+      return notFound(res, "Cita no encontrada");
+    }
+    // Validar permisos según rol
     if (req.usuario.rol === "cliente" && cita.cliente_id !== req.usuario.id) {
       return forbidden(res, "No tienes permiso para ver esta cita");
     }
     if (req.usuario.rol === "barbero" && cita.barbero_id !== req.usuario.id) {
       return forbidden(res, "No tienes permiso para ver esta cita");
     }
+    // Admin puede ver cualquier cita
     return ok(res, { cita });
   } catch (error) {
-    return serverError(res, "getCitaById", error);
+    next(error);
   }
 };
 
-export const reagendarCita = async (req, res) => {
-  try {
-    const { fecha, hora } = req.body;
-    if (!fecha || !hora) return badRequest(res, "Se requiere fecha y hora");
+// ============ BARBERO ============
 
-    const resultado = await citaService.reagendarCita({
-      citaId: req.params.id,
-      fecha,
-      hora,
-      usuarioId: req.usuario.id,
-      usuarioRol: req.usuario.rol,
-    });
-
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Cita reagendada exitosamente", cita }),
-    );
-  } catch (error) {
-    return serverError(res, "reagendarCita", error);
-  }
-};
-
-export const cancelarCita = async (req, res) => {
-  try {
-    const resultado = await citaService.cancelarCita({
-      citaId: req.params.id,
-      usuarioId: req.usuario.id,
-      usuarioRol: req.usuario.rol,
-      usuarioNombre: req.usuario.nombre,
-    });
-
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Cita cancelada exitosamente", cita }),
-    );
-  } catch (error) {
-    return serverError(res, "cancelarCita", error);
-  }
-};
-
-// ─── BARBERO / ADMIN ────────────────────────────────────────────────────────
-
-export const getAgendaDia = async (req, res) => {
+export const getAgendaDia = async (req, res, next) => {
   try {
     const { fecha } = req.query;
     const barberoId =
       req.usuario.rol === "admin" && req.query.barbero_id
         ? req.query.barbero_id
         : req.usuario.id;
-    const citas = await citaModel.getAgendaDiaByBarbero(barberoId, fecha);
-    return ok(res, {
-      fecha: fecha || new Date().toISOString().split("T")[0],
-      citas,
-      total_citas: citas.length,
-    });
+
+    const agenda = await barberoCitaService.getAgendaDia(
+      barberoId,
+      fecha,
+      req.usuario.id,
+      req.usuario.rol,
+    );
+
+    return ok(res, agenda);
   } catch (error) {
-    return serverError(res, "getAgendaDia", error);
+    next(error);
   }
 };
 
-export const getResumenCitas = async (req, res) => {
+export const getAgendaSemana = async (req, res, next) => {
+  try {
+    const { id: barberoId } = req.params;
+    const fechaInicio =
+      req.query.fecha_inicio || new Date().toISOString().split("T")[0];
+
+    const agenda = await barberoCitaService.getAgendaSemana(
+      barberoId,
+      fechaInicio,
+      req.usuario.id,
+      req.usuario.rol,
+    );
+
+    return ok(res, agenda);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const confirmarCita = async (req, res, next) => {
+  try {
+    const cita = await barberoCitaService.confirmar(
+      req.params.id,
+      req.usuario.id,
+    );
+    return ok(res, { message: "Cita confirmada exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const finalizarCita = async (req, res, next) => {
+  try {
+    const cita = await barberoCitaService.finalizar(
+      req.params.id,
+      req.usuario.id,
+    );
+    return ok(res, { message: "Cita finalizada exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const actualizarEstadoCita = async (req, res, next) => {
+  try {
+    const { estado } = req.body;
+    const estadosValidos = [
+      "pendiente",
+      "confirmada",
+      "completada",
+      "cancelada",
+    ];
+
+    if (!estado || !estadosValidos.includes(estado)) {
+      return badRequest(
+        res,
+        `Estado inválido. Estados permitidos: ${estadosValidos.join(", ")}`,
+      );
+    }
+
+    const cita = await citaRepository.updateEstado(req.params.id, estado);
+
+    if (!cita) {
+      return notFound(res, "Cita no encontrada");
+    }
+
+    return ok(res, { message: "Estado actualizado exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCitasBarbero = async (req, res, next) => {
+  try {
+    const { barbero_id } = req.params;
+    const { fecha_inicio, fecha_fin, estado } = req.query;
+
+    // Validar permisos
+    if (
+      req.usuario.rol === "barbero" &&
+      parseInt(barbero_id) !== req.usuario.id
+    ) {
+      return forbidden(res, "No tienes permiso para ver citas de otro barbero");
+    }
+
+    let citas;
+    if (fecha_inicio && fecha_fin) {
+      citas = await citaRepository.findByBarberoAndDateRange(
+        barbero_id,
+        fecha_inicio,
+        fecha_fin,
+      );
+    } else if (fecha_inicio) {
+      citas = await citaRepository.findByBarberoAndDate(
+        barbero_id,
+        fecha_inicio,
+      );
+    } else {
+      citas = await citaRepository.findByBarberoAndDate(
+        barbero_id,
+        new Date().toISOString().split("T")[0],
+      );
+    }
+
+    // Filtrar por estado si es necesario
+    if (estado) {
+      citas = citas.filter((c) => c.estado === estado);
+    }
+
+    return ok(res, { citas, total: citas.length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getResumenCitas = async (req, res, next) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
-    const resumen = await citaModel.getResumenCitasByBarbero(
+    const resumen = await barberoCitaService.getResumenCitas(
       req.usuario.id,
       fecha_inicio,
       fecha_fin,
     );
     return ok(res, { resumen });
   } catch (error) {
-    return serverError(res, "getResumenCitas", error);
+    next(error);
   }
 };
 
-export const getAgendaSemana = async (req, res) => {
+export const getHorariosDisponibles = async (req, res, next) => {
   try {
     const { id: barberoId } = req.params;
-    const fecha =
-      req.query.fecha_inicio || new Date().toISOString().split("T")[0];
-    if (
-      req.usuario.rol === "barbero" &&
-      parseInt(barberoId) !== req.usuario.id
-    ) {
-      return forbidden(
-        res,
-        "No tienes permiso para ver la agenda de otro barbero",
-      );
+    const { fecha } = req.query;
+
+    if (!fecha) {
+      return badRequest(res, "Se requiere fecha");
     }
-    const resultado = await citaModel.getCitasSemanaByBarbero(barberoId, fecha);
-    return ok(res, {
-      ...resultado,
-      total_citas: Object.values(resultado.agenda).flat().length,
-    });
-  } catch (error) {
-    return serverError(res, "getAgendaSemana", error);
-  }
-};
 
-export const getCitasBarbero = async (req, res) => {
-  try {
-    const { barbero_id } = req.params;
-    const { fecha } = req.query;
-    const id = req.usuario.rol === "barbero" ? req.usuario.id : barbero_id;
-    const citas = await citaModel.getCitasByBarbero(id, fecha);
-    return ok(res, { citas });
-  } catch (error) {
-    return serverError(res, "getCitasBarbero", error);
-  }
-};
-
-export const getHorariosDisponibles = async (req, res) => {
-  try {
-    const { id: barberoId } = req.params;
-    const { fecha } = req.query;
-
-    // La configuración ya está disponible en req.config (del middleware)
-    const config = req.config;
-
-    const resultado = await citaService.getHorariosDisponibles({
+    const resultado = await barberoCitaService.getHorariosDisponibles(
       barberoId,
       fecha,
-      config, // Pasar configuración al servicio
-      duracionSlot: 30,
-    });
+    );
 
-    if (resultado.error) {
-      return res.status(400).json({ ok: false, message: resultado.error });
-    }
-
-    if (resultado.notFound) {
-      return res.status(404).json({ ok: false, message: resultado.notFound });
-    }
-
-    res.json({
-      ok: true,
+    return ok(res, {
       horarios_disponibles: resultado.horarios,
-      mensaje: resultado.mensaje,
+      mensaje:
+        resultado.mensaje ||
+        `${resultado.horarios.length} horarios disponibles`,
     });
   } catch (error) {
-    console.error("Error en getHorariosDisponibles:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-export const actualizarEstadoCita = async (req, res) => {
-  try {
-    const resultado = await citaService.actualizarEstadoCita({
-      citaId: req.params.id,
-      estado: req.body.estado,
-      usuarioId: req.usuario.id,
-      usuarioRol: req.usuario.rol,
-    });
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Estado de la cita actualizado", cita }),
-    );
-  } catch (error) {
-    return serverError(res, "actualizarEstadoCita", error);
-  }
-};
-
-export const confirmarCita = async (req, res) => {
-  try {
-    const resultado = await citaService.confirmarCita({
-      citaId: req.params.id,
-      usuarioId: req.usuario.id,
-      usuarioRol: req.usuario.rol,
-    });
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Cita confirmada exitosamente", cita }),
-    );
-  } catch (error) {
-    return serverError(res, "confirmarCita", error);
-  }
-};
-
-export const finalizarCita = async (req, res) => {
-  try {
-    const resultado = await citaService.finalizarCita({
-      citaId: req.params.id,
-      usuarioId: req.usuario.id,
-      usuarioRol: req.usuario.rol,
-    });
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Cita finalizada exitosamente", cita }),
-    );
-  } catch (error) {
-    return serverError(res, "finalizarCita", error);
-  }
-};
-
-export const verificarDisponibilidad = async (req, res) => {
+export const verificarDisponibilidad = async (req, res, next) => {
   try {
     const { barbero_id, fecha, hora } = req.query;
+
     if (!barbero_id || !fecha || !hora) {
       return badRequest(res, "Se requiere barbero_id, fecha y hora");
     }
-    const disponible = await citaModel.verificarDisponibilidad(
+
+    const disponible = await citaRepository.existsDuplicate(
       barbero_id,
       fecha,
       hora,
     );
-    const horariosOcupados = await citaModel.getHorariosOcupados(
-      barbero_id,
-      fecha,
-    );
-    return ok(res, { disponible, horarios_ocupados: horariosOcupados });
+
+    return ok(res, {
+      disponible: !disponible,
+      mensaje: disponible ? "Horario no disponible" : "Horario disponible",
+    });
   } catch (error) {
-    return serverError(res, "verificarDisponibilidad", error);
+    next(error);
   }
 };
 
-// ─── ADMIN ──────────────────────────────────────────────────────────────────
+// ============ ADMIN ============
 
-export const crearCitaAdmin = async (req, res) => {
+export const crearCitaAdmin = async (req, res, next) => {
   try {
     const { cliente_id, barbero_id, servicio_id, fecha, hora, notas } =
       req.body;
+
     if (!cliente_id || !barbero_id || !servicio_id || !fecha || !hora) {
       return badRequest(res, "Todos los campos son requeridos");
     }
 
-    const resultado = await citaService.crearCitaAdmin({
+    const cita = await adminCitaService.crearCitaAdmin({
       clienteId: parseInt(cliente_id),
       barberoId: parseInt(barbero_id),
       servicioId: parseInt(servicio_id),
@@ -334,162 +354,387 @@ export const crearCitaAdmin = async (req, res) => {
       notas,
     });
 
-    return manejarResultado(res, resultado, ({ cita }) =>
-      created(res, {
-        message: "Cita creada exitosamente por el administrador",
-        cita,
-      }),
-    );
+    return created(res, {
+      message: "Cita creada exitosamente por el administrador",
+      cita,
+    });
   } catch (error) {
-    return serverError(res, "crearCitaAdmin", error);
+    next(error);
   }
 };
 
-export const getAllCitas = async (req, res) => {
+export const editarCitaAdmin = async (req, res, next) => {
   try {
-    const { estado, fecha_desde, fecha_hasta } = req.query;
-    let page = parseInt(req.query.page) || 1;
-    let limit = parseInt(req.query.limit) || 15;
-    if (page <= 0) page = 1;
-    if (limit <= 0 || limit > 100) limit = 15;
+    const cita = await adminCitaService.editarCitaAdmin(
+      req.params.id,
+      req.body,
+    );
+    return ok(res, { message: "Cita actualizada exitosamente", cita });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    const citas = await citaModel.getAllCitas({
+export const getAllCitas = async (req, res, next) => {
+  try {
+    const {
       estado,
       fecha_desde,
       fecha_hasta,
-    });
-    const total = citas.length;
-    const paginated = citas.slice((page - 1) * limit, page * limit);
+      page = 1,
+      limit = 15,
+    } = req.query;
 
-    return ok(res, {
-      citas: paginated,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-      limit,
-    });
+    const citas = await adminCitaService.getAllCitas(
+      { estado, fecha_desde, fecha_hasta },
+      { page: parseInt(page), limit: parseInt(limit) },
+    );
+
+    return ok(res, { citas });
   } catch (error) {
-    return serverError(res, "getAllCitas", error);
+    next(error);
   }
 };
 
-export const getDashboard = async (req, res) => {
+export const getDashboard = async (req, res, next) => {
   try {
-    const stats = await citaModel.getDashboardStats();
+    const stats = await adminCitaService.getDashboardStats();
     return ok(res, { dashboard: stats });
   } catch (error) {
-    return serverError(res, "getDashboard", error);
+    next(error);
   }
 };
 
-export const getDistribucionHoraria = async (req, res) => {
+export const getDistribucionHoraria = async (req, res, next) => {
   try {
-    const { fecha_inicio, fecha_fin } = req.query;
-    const distribucion = await citaModel.getDistribucionCitasPorHora(
-      fecha_inicio,
-      fecha_fin,
+    let { fecha_inicio, fecha_fin } = req.query;
+
+    // Si no hay fechas o son null, usar el último mes
+    if (
+      !fecha_inicio ||
+      fecha_inicio === "null" ||
+      fecha_inicio === "undefined" ||
+      fecha_inicio === ""
+    ) {
+      const haceUnMes = new Date();
+      haceUnMes.setMonth(haceUnMes.getMonth() - 1);
+      fecha_inicio = haceUnMes.toISOString().split("T")[0];
+    }
+    if (
+      !fecha_fin ||
+      fecha_fin === "null" ||
+      fecha_fin === "undefined" ||
+      fecha_fin === ""
+    ) {
+      const hoy = new Date();
+      fecha_fin = hoy.toISOString().split("T")[0];
+    }
+
+    const pool = getPool();
+    const [rows] = await pool.execute(
+      `SELECT HOUR(hora) as hora, 
+              COUNT(*) as total_citas,
+              SUM(CASE WHEN estado = 'completada' THEN 1 ELSE 0 END) as completadas,
+              SUM(CASE WHEN estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas
+       FROM citas
+       WHERE fecha BETWEEN ? AND ?
+         AND estado != 'pendiente'
+       GROUP BY HOUR(hora)
+       ORDER BY hora ASC`,
+      [fecha_inicio, fecha_fin],
     );
-    return ok(res, { distribucion });
+
+    return ok(res, { distribucion: rows });
   } catch (error) {
-    return serverError(res, "getDistribucionHoraria", error);
+    next(error);
   }
 };
 
-export const getReporteIngresos = async (req, res) => {
+export const getReporteIngresos = async (req, res, next) => {
   try {
-    const { periodo = "mes", fecha_inicio, fecha_fin } = req.query;
-    if (!["dia", "mes", "año"].includes(periodo)) {
-      return badRequest(res, "Período no válido. Use: dia, mes, año");
+    let { periodo = "mes", fecha_inicio, fecha_fin } = req.query;
+
+    // Si no hay fechas o son null, usar el último mes
+    if (
+      !fecha_inicio ||
+      fecha_inicio === "null" ||
+      fecha_inicio === "undefined" ||
+      fecha_inicio === ""
+    ) {
+      const haceUnMes = new Date();
+      haceUnMes.setMonth(haceUnMes.getMonth() - 1);
+      fecha_inicio = haceUnMes.toISOString().split("T")[0];
     }
-    if (!fecha_inicio || !fecha_fin) {
-      return badRequest(res, "Se requiere fecha_inicio y fecha_fin");
+    if (
+      !fecha_fin ||
+      fecha_fin === "null" ||
+      fecha_fin === "undefined" ||
+      fecha_fin === ""
+    ) {
+      const hoy = new Date();
+      fecha_fin = hoy.toISOString().split("T")[0];
     }
-    const reporte = await citaModel.getReporteIngresos(
+
+    const reporte = await adminCitaService.getReporteIngresos(
       periodo,
       fecha_inicio,
       fecha_fin,
     );
     return ok(res, { periodo, fecha_inicio, fecha_fin, reporte });
   } catch (error) {
-    return serverError(res, "getReporteIngresos", error);
+    next(error);
   }
 };
 
-export const getServiciosTop = async (req, res) => {
+export const getServiciosTop = async (req, res, next) => {
   try {
-    const { fecha_inicio, fecha_fin, limite = 5 } = req.query;
-    const limiteNum = Math.min(Math.max(parseInt(limite) || 5, 1), 50);
-    const servicios = await citaModel.getServiciosMasSolicitados(
-      fecha_inicio,
-      fecha_fin,
-      limiteNum,
-    );
-    return ok(res, { servicios });
+    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
+
+    console.log("getServiciosTop params:", { fecha_inicio, fecha_fin, limite });
+
+    // Validar limite
+    let limiteNum = parseInt(limite);
+    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
+    if (limiteNum > 100) limiteNum = 100;
+
+    const pool = getPool();
+    let query, params;
+
+    // Verificar si se enviaron fechas válidas
+    const tieneFechas =
+      fecha_inicio &&
+      fecha_fin &&
+      fecha_inicio !== "null" &&
+      fecha_inicio !== "undefined" &&
+      fecha_fin !== "null" &&
+      fecha_fin !== "undefined" &&
+      fecha_inicio !== "" &&
+      fecha_fin !== "";
+
+    if (tieneFechas) {
+      query = `
+        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas
+        FROM servicios s
+        LEFT JOIN citas c ON s.id = c.servicio_id AND c.estado = 'completada' AND c.fecha BETWEEN ? AND ?
+        GROUP BY s.id, s.nombre, s.precio
+        ORDER BY total_citas DESC
+        LIMIT ?
+      `;
+      params = [fecha_inicio, fecha_fin, limiteNum];
+    } else {
+      query = `
+        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas
+        FROM servicios s
+        LEFT JOIN citas c ON s.id = c.servicio_id AND c.estado = 'completada'
+        GROUP BY s.id, s.nombre, s.precio
+        ORDER BY total_citas DESC
+        LIMIT ?
+      `;
+      params = [limiteNum];
+    }
+
+    const [rows] = await pool.execute(query, params);
+    return ok(res, { servicios: rows });
   } catch (error) {
-    return serverError(res, "getServiciosTop", error);
+    console.error("Error en getServiciosTop:", error);
+    return ok(res, { servicios: [] });
   }
 };
 
-export const getClientesTop = async (req, res) => {
+export const getClientesTop = async (req, res, next) => {
   try {
-    const { fecha_inicio, fecha_fin, limite = 10 } = req.query;
-    const limiteNum = Math.min(Math.max(parseInt(limite) || 10, 1), 100);
-    const clientes = await citaModel.getClientesMasFrecuentes(
-      fecha_inicio,
-      fecha_fin,
-      limiteNum,
-    );
-    return ok(res, { clientes });
+    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
+
+    console.log("getClientesTop params:", { fecha_inicio, fecha_fin, limite });
+
+    // Validar limite
+    let limiteNum = parseInt(limite);
+    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
+    if (limiteNum > 100) limiteNum = 100;
+
+    const pool = getPool();
+    let query, params;
+
+    // Verificar si se enviaron fechas válidas
+    const tieneFechas =
+      fecha_inicio &&
+      fecha_fin &&
+      fecha_inicio !== "null" &&
+      fecha_inicio !== "undefined" &&
+      fecha_fin !== "null" &&
+      fecha_fin !== "undefined" &&
+      fecha_inicio !== "" &&
+      fecha_fin !== "";
+
+    if (tieneFechas) {
+      query = `
+        SELECT u.id, u.nombre, u.email, 
+               COUNT(c.id) as total_citas, 
+               COALESCE(SUM(s.precio), 0) as total_gastado
+        FROM usuarios u
+        INNER JOIN citas c ON u.id = c.cliente_id AND c.estado = 'completada' AND c.fecha BETWEEN ? AND ?
+        INNER JOIN servicios s ON c.servicio_id = s.id
+        WHERE u.rol = 'cliente'
+        GROUP BY u.id, u.nombre, u.email
+        ORDER BY total_citas DESC
+        LIMIT ?
+      `;
+      params = [fecha_inicio, fecha_fin, limiteNum];
+    } else {
+      query = `
+        SELECT u.id, u.nombre, u.email, 
+               COUNT(c.id) as total_citas, 
+               COALESCE(SUM(s.precio), 0) as total_gastado
+        FROM usuarios u
+        INNER JOIN citas c ON u.id = c.cliente_id AND c.estado = 'completada'
+        INNER JOIN servicios s ON c.servicio_id = s.id
+        WHERE u.rol = 'cliente'
+        GROUP BY u.id, u.nombre, u.email
+        ORDER BY total_citas DESC
+        LIMIT ?
+      `;
+      params = [limiteNum];
+    }
+
+    const [rows] = await pool.execute(query, params);
+    return ok(res, { clientes: rows });
   } catch (error) {
-    return serverError(res, "getClientesTop", error);
+    console.error("Error en getClientesTop:", error);
+    return ok(res, { clientes: [] });
   }
 };
 
-export const getTasaCancelacion = async (req, res) => {
+export const getTasaCancelacion = async (req, res, next) => {
   try {
-    const { fecha_inicio, fecha_fin } = req.query;
-    const reporte = await citaModel.getTasaCancelacionPorBarbero(
-      fecha_inicio,
-      fecha_fin,
-    );
-    return ok(res, { reporte });
+    let { fecha_inicio, fecha_fin } = req.query;
+
+    const pool = getPool();
+    let query, params;
+
+    // Verificar si se enviaron fechas válidas
+    const tieneFechas =
+      fecha_inicio &&
+      fecha_fin &&
+      fecha_inicio !== "null" &&
+      fecha_inicio !== "undefined" &&
+      fecha_fin !== "null" &&
+      fecha_fin !== "undefined" &&
+      fecha_inicio !== "" &&
+      fecha_fin !== "";
+
+    if (tieneFechas) {
+      query = `
+        SELECT 
+          u.id, u.nombre,
+          COUNT(c.id) as total_citas,
+          SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas,
+          ROUND(SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) * 100.0 / COUNT(c.id), 2) as tasa_cancelacion
+        FROM usuarios u
+        LEFT JOIN citas c ON u.id = c.barbero_id AND c.fecha BETWEEN ? AND ?
+        WHERE u.rol = 'barbero'
+        GROUP BY u.id, u.nombre
+        HAVING total_citas > 0
+        ORDER BY tasa_cancelacion DESC
+      `;
+      params = [fecha_inicio, fecha_fin];
+    } else {
+      query = `
+        SELECT 
+          u.id, u.nombre,
+          COUNT(c.id) as total_citas,
+          SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas,
+          ROUND(SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) * 100.0 / COUNT(c.id), 2) as tasa_cancelacion
+        FROM usuarios u
+        LEFT JOIN citas c ON u.id = c.barbero_id
+        WHERE u.rol = 'barbero'
+        GROUP BY u.id, u.nombre
+        HAVING total_citas > 0
+        ORDER BY tasa_cancelacion DESC
+      `;
+      params = [];
+    }
+
+    const [rows] = await pool.execute(query, params);
+    return ok(res, { reporte: rows });
   } catch (error) {
-    return serverError(res, "getTasaCancelacion", error);
+    console.error("Error en getTasaCancelacion:", error);
+    return ok(res, { reporte: [] });
   }
 };
 
-export const editarCitaAdmin = async (req, res) => {
+export const getTasaCancelacionPorBarbero = async (req, res, next) => {
   try {
-    const resultado = await citaService.editarCitaAdmin({
-      citaId: req.params.id,
-      campos: req.body,
-    });
-    return manejarResultado(res, resultado, ({ cita }) =>
-      ok(res, { message: "Cita actualizada exitosamente", cita }),
+    let { fecha_inicio, fecha_fin } = req.query;
+
+    // Si no hay fechas o son null, usar el último mes
+    if (
+      !fecha_inicio ||
+      fecha_inicio === "null" ||
+      fecha_inicio === "undefined" ||
+      fecha_inicio === ""
+    ) {
+      const haceUnMes = new Date();
+      haceUnMes.setMonth(haceUnMes.getMonth() - 1);
+      fecha_inicio = haceUnMes.toISOString().split("T")[0];
+    }
+    if (
+      !fecha_fin ||
+      fecha_fin === "null" ||
+      fecha_fin === "undefined" ||
+      fecha_fin === ""
+    ) {
+      const hoy = new Date();
+      fecha_fin = hoy.toISOString().split("T")[0];
+    }
+
+    const pool = getPool();
+
+    // Consulta corregida
+    const [rows] = await pool.execute(
+      `SELECT 
+        u.id, u.nombre,
+        COUNT(c.id) as total_citas,
+        SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) as canceladas,
+        ROUND(IFNULL(SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END) * 100.0 / COUNT(c.id), 0), 2) as tasa_cancelacion
+       FROM usuarios u
+       LEFT JOIN citas c ON u.id = c.barbero_id AND c.fecha BETWEEN ? AND ?
+       WHERE u.rol = 'barbero'
+       GROUP BY u.id, u.nombre
+       HAVING total_citas > 0
+       ORDER BY tasa_cancelacion DESC`,
+      [fecha_inicio, fecha_fin],
     );
+
+    return ok(res, { barberos: rows });
   } catch (error) {
-    return serverError(res, "editarCitaAdmin", error);
+    console.error("Error en getTasaCancelacionPorBarbero:", error);
+    return ok(res, { barberos: [] });
   }
 };
 
+// Exportar todos
 export default {
+  // Cliente
   agendarCita,
   getMisCitas,
   getProximasCitas,
   getHistorialCitas,
-  reagendarCita,
   cancelarCita,
+  reagendarCita,
   getCitaById,
+  // Barbero
   getAgendaDia,
-  getResumenCitas,
   getAgendaSemana,
-  getCitasBarbero,
-  getHorariosDisponibles,
-  actualizarEstadoCita,
   confirmarCita,
   finalizarCita,
+  actualizarEstadoCita,
+  getCitasBarbero,
+  getResumenCitas,
+  getHorariosDisponibles,
   verificarDisponibilidad,
+  // Admin
   crearCitaAdmin,
+  editarCitaAdmin,
   getAllCitas,
   getDashboard,
   getDistribucionHoraria,
@@ -497,5 +742,5 @@ export default {
   getServiciosTop,
   getClientesTop,
   getTasaCancelacion,
-  editarCitaAdmin,
+  getTasaCancelacionPorBarbero,
 };

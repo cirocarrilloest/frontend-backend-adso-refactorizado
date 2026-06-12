@@ -1,342 +1,246 @@
-// controllers/userController.js
+// backend/src/controllers/userController.js
+import { userRepository } from "../repositories/userRepository.js";
 import { getPool } from "../config/db.js";
-import * as userModel from "../models/userModel.js";
-import bcrypt from "bcryptjs";
-// Listar todos los usuarios (admin)
-export const getUsuarios = async (req, res) => {
+import { ok, created, badRequest, notFound } from "../utils/responseUtils.js";
+import { NotFoundError, ValidationError } from "../utils/errors.js";
+
+/**
+ * Controlador de usuarios - Capa de presentación
+ */
+
+export const getUsuarios = async (req, res, next) => {
   try {
     const { rol, search } = req.query;
-    const pool = getPool();
-
-    let query = `SELECT id, nombre, email, rol, telefono, created_at FROM usuarios WHERE 1=1`;
-    const params = [];
-
-    if (rol) {
-      query += ` AND rol = ?`;
-      params.push(rol);
-    }
-
-    if (search) {
-      query += ` AND (nombre LIKE ? OR email LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`);
-    }
-
-    query += ` ORDER BY created_at DESC`;
-
-    const [rows] = await pool.execute(query, params);
-    res.json({ ok: true, usuarios: rows });
+    const usuarios = await userRepository.findAll({ rol, search });
+    return ok(res, { usuarios });
   } catch (error) {
-    console.error("Error al obtener usuarios:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-// Obtener usuario por ID
-export const getUsuarioById = async (req, res) => {
+export const getUsuarioById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const usuario = await userModel.getUserById(id);
-
+    const usuario = await userRepository.findById(id);
     if (!usuario) {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Usuario no encontrado" });
+      throw new NotFoundError("Usuario");
     }
-
-    res.json({ ok: true, usuario });
+    return ok(res, { usuario });
   } catch (error) {
-    console.error("Error al obtener usuario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-// Crear usuario (admin)
-export const createUsuario = async (req, res) => {
+export const createUsuario = async (req, res, next) => {
   try {
     const { nombre, email, pass, rol, telefono } = req.body;
 
-    const usuarioExistente = await userModel.findUserByEmail(email);
-    if (usuarioExistente) {
-      return res
-        .status(409)
-        .json({ ok: false, message: "El email ya está registrado" });
+    if (!nombre || !email || !pass) {
+      throw new ValidationError("Nombre, email y contraseña son requeridos");
     }
 
-    const salt = await bcrypt.genSalt(
-      parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10,
-    );
-    const hashedPassword = await bcrypt.hash(pass, salt);
+    const existe = await userRepository.emailExists(email);
+    if (existe) {
+      throw new ValidationError("El email ya está registrado");
+    }
 
-    const pool = getPool();
-    const query = `INSERT INTO usuarios (nombre, email, pass, rol, telefono) VALUES (?, ?, ?, ?, ?)`;
-    const [result] = await pool.execute(query, [
+    const nuevoUsuario = await userRepository.create({
       nombre,
-      email.toLowerCase(),
-      hashedPassword,
-      rol || "cliente",
-      telefono || null,
-    ]);
+      email,
+      pass,
+      rol: rol || "cliente",
+      telefono,
+    });
 
-    const nuevoUsuario = await userModel.getUserById(result.insertId);
-
-    res.status(201).json({
-      ok: true,
+    return created(res, {
       message: "Usuario creado exitosamente",
       usuario: nuevoUsuario,
     });
   } catch (error) {
-    console.error("Error al crear usuario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-// Actualizar usuario
-export const updateUsuario = async (req, res) => {
+export const updateUsuario = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { nombre, email, rol, telefono, pass } = req.body;
 
-    const usuarioExistente = await userModel.getUserById(id);
+    console.log("📝 Actualizando usuario:", {
+      id,
+      nombre,
+      email,
+      rol,
+      telefono,
+    });
+
+    const usuarioExistente = await userRepository.findById(id);
     if (!usuarioExistente) {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Usuario no encontrado" });
+      throw new NotFoundError("Usuario");
     }
 
-    const pool = getPool();
-    let query = `UPDATE usuarios SET nombre = ?, email = ?, rol = ?, telefono = ?`;
-    const params = [
-      nombre || usuarioExistente.nombre,
-      email || usuarioExistente.email,
-      rol || usuarioExistente.rol,
-      telefono || null,
-    ];
+    const updates = {};
+    if (nombre !== undefined) updates.nombre = nombre;
+    if (email !== undefined) updates.email = email;
+    if (rol !== undefined) updates.rol = rol; // ✅ Asegurar que rol se incluya
+    if (telefono !== undefined) updates.telefono = telefono;
+    if (pass !== undefined) updates.pass = pass;
 
-    if (pass) {
-      const salt = await bcrypt.genSalt(
-        parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10,
-      );
-      const hashedPassword = await bcrypt.hash(pass, salt);
-      query += `, pass = ?`;
-      params.push(hashedPassword);
-    }
+    const usuarioActualizado = await userRepository.update(id, updates);
 
-    query += ` WHERE id = ?`;
-    params.push(id);
+    console.log("✅ Usuario actualizado:", usuarioActualizado);
 
-    await pool.execute(query, params);
-
-    const usuarioActualizado = await userModel.getUserById(id);
-    res.json({
-      ok: true,
+    return ok(res, {
       message: "Usuario actualizado exitosamente",
       usuario: usuarioActualizado,
     });
   } catch (error) {
-    console.error("Error al actualizar usuario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-// Cambiar contraseña de usuario (admin)
-export const cambiarPasswordAdmin = async (req, res) => {
+export const deleteUsuario = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { pass } = req.body;
-
-    if (!pass) {
-      return res.status(400).json({
-        ok: false,
-        message: "La nueva contraseña es requerida",
-      });
-    }
-
-    if (pass.length < 6) {
-      return res.status(400).json({
-        ok: false,
-        message: "La contraseña debe tener al menos 6 caracteres",
-      });
-    }
-
-    const usuario = await userModel.getUserById(id);
-
+    const usuario = await userRepository.findById(id);
     if (!usuario) {
-      return res.status(404).json({
-        ok: false,
-        message: "Usuario no encontrado",
-      });
+      throw new NotFoundError("Usuario");
     }
 
-    const salt = await bcrypt.genSalt(
-      parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10,
-    );
-
-    const hashedPassword = await bcrypt.hash(pass, salt);
-
-    const pool = getPool();
-
-    await pool.execute("UPDATE usuarios SET pass = ? WHERE id = ?", [
-      hashedPassword,
-      id,
-    ]);
-
-    res.json({
-      ok: true,
-      message: "Contraseña actualizada exitosamente",
-    });
+    await userRepository.delete(id);
+    return ok(res, { message: "Usuario eliminado exitosamente" });
   } catch (error) {
-    console.error("Error al cambiar contraseña:", error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Eliminar usuario
-export const deleteUsuario = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const usuario = await userModel.getUserById(id);
-    if (!usuario) {
-      return res
-        .status(404)
-        .json({ ok: false, message: "Usuario no encontrado" });
-    }
-
-    const pool = getPool();
-    await pool.execute(`DELETE FROM usuarios WHERE id = ?`, [id]);
-
-    res.json({ ok: true, message: "Usuario eliminado exitosamente" });
-  } catch (error) {
-    console.error("Error al eliminar usuario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
-  }
-};
-
-// Asignar rol a usuario
-export const asignarRol = async (req, res) => {
+export const asignarRol = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { rol } = req.body;
 
     const rolesPermitidos = ["admin", "barbero", "cliente"];
     if (!rolesPermitidos.includes(rol)) {
-      return res.status(400).json({ ok: false, message: "Rol no válido" });
+      throw new ValidationError("Rol no válido");
     }
 
-    const pool = getPool();
-    await pool.execute(`UPDATE usuarios SET rol = ? WHERE id = ?`, [rol, id]);
+    const usuario = await userRepository.findById(id);
+    if (!usuario) {
+      throw new NotFoundError("Usuario");
+    }
 
-    const usuarioActualizado = await userModel.getUserById(id);
-    res.json({
-      ok: true,
+    const usuarioActualizado = await userRepository.update(id, { rol });
+
+    return ok(res, {
       message: "Rol asignado exitosamente",
       usuario: usuarioActualizado,
     });
   } catch (error) {
-    console.error("Error al asignar rol:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-// Actualizar mi propio perfil (cliente/barbero)
-export const updateMiPerfil = async (req, res) => {
+export const cambiarPasswordAdmin = async (req, res, next) => {
   try {
-    // Verificar que req.body existe
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        ok: false,
-        message: "No se enviaron datos para actualizar",
-      });
+    const { id } = req.params;
+    const { pass } = req.body;
+
+    if (!pass || pass.length < 6) {
+      throw new ValidationError(
+        "La nueva contraseña debe tener al menos 6 caracteres",
+      );
     }
 
+    const usuario = await userRepository.findById(id);
+    if (!usuario) {
+      throw new NotFoundError("Usuario");
+    }
+
+    const usuarioActualizado = await userRepository.update(id, { pass });
+
+    return ok(res, {
+      message: "Contraseña actualizada exitosamente",
+      usuario: {
+        id: usuarioActualizado.id,
+        nombre: usuarioActualizado.nombre,
+        email: usuarioActualizado.email,
+        rol: usuarioActualizado.rol,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getBarberos = async (req, res, next) => {
+  try {
+    const barberos = await userRepository.getBarberos();
+    return ok(res, { barberos });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getHorarioBarbero = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const horarios = await userRepository.getHorarioBarbero(id);
+    return ok(res, { horarios });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const setHorarioBarbero = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { dia_semana, hora_inicio, hora_fin } = req.body;
+
+    const horario = await userRepository.setHorarioBarbero(id, {
+      dia_semana,
+      hora_inicio,
+      hora_fin,
+    });
+
+    return ok(res, { message: "Horario configurado exitosamente", horario });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteHorarioBarbero = async (req, res, next) => {
+  try {
+    const { id, dia } = req.params;
+    await userRepository.deleteHorarioBarbero(id, dia);
+    return ok(res, { message: "Horario eliminado exitosamente" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateMiPerfil = async (req, res, next) => {
+  try {
     const usuarioId = req.usuario.id;
     const { nombre, email, telefono, pass } = req.body;
 
-    const usuarioExistente = await userModel.getUserById(usuarioId);
-    if (!usuarioExistente) {
-      return res.status(404).json({
-        ok: false,
-        message: "Usuario no encontrado",
-      });
-    }
+    const updates = {};
+    if (nombre) updates.nombre = nombre;
+    if (email) updates.email = email;
+    if (telefono !== undefined) updates.telefono = telefono;
+    if (pass) updates.pass = pass;
 
-    const pool = getPool();
+    const usuarioActualizado = await userRepository.update(usuarioId, updates);
 
-    // Construir query dinámicamente según los campos enviados
-    const updates = [];
-    const params = [];
-
-    if (nombre !== undefined) {
-      updates.push("nombre = ?");
-      params.push(nombre);
-    }
-
-    if (email !== undefined) {
-      // Verificar que el nuevo email no esté en uso por otro usuario
-      if (email !== usuarioExistente.email) {
-        const [emailExiste] = await pool.execute(
-          "SELECT id FROM usuarios WHERE email = ? AND id != ?",
-          [email.toLowerCase(), usuarioId],
-        );
-        if (emailExiste.length > 0) {
-          return res.status(409).json({
-            ok: false,
-            message: "El email ya está en uso por otro usuario",
-          });
-        }
-        updates.push("email = ?");
-        params.push(email.toLowerCase());
-      }
-    }
-
-    if (telefono !== undefined) {
-      updates.push("telefono = ?");
-      params.push(telefono || null);
-    }
-
-    if (pass) {
-      const salt = await bcrypt.genSalt(
-        parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10,
-      );
-      const hashedPassword = await bcrypt.hash(pass, salt);
-      updates.push("pass = ?");
-      params.push(hashedPassword);
-    }
-
-    // Si no hay nada que actualizar
-    if (updates.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        message: "No se proporcionaron campos válidos para actualizar",
-      });
-    }
-
-    const query = `UPDATE usuarios SET ${updates.join(", ")} WHERE id = ?`;
-    params.push(usuarioId);
-
-    await pool.execute(query, params);
-
-    const usuarioActualizado = await userModel.getUserById(usuarioId);
-    res.json({
-      ok: true,
+    return ok(res, {
       message: "Perfil actualizado exitosamente",
       usuario: usuarioActualizado,
     });
   } catch (error) {
-    console.error("Error al actualizar perfil:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Eliminar mi propia cuenta
-export const deleteMiCuenta = async (req, res) => {
+export const deleteMiCuenta = async (req, res, next) => {
   try {
     const usuarioId = req.usuario.id;
 
@@ -349,170 +253,65 @@ export const deleteMiCuenta = async (req, res) => {
     );
 
     if (citas[0].total > 0) {
-      return res.status(400).json({
-        ok: false,
-        message: `No puedes eliminar tu cuenta porque tienes ${citas[0].total} cita(s) pendiente(s)`,
-      });
+      throw new ValidationError(
+        `No puedes eliminar tu cuenta porque tienes ${citas[0].total} cita(s) pendiente(s)`,
+      );
     }
 
-    await pool.execute(`DELETE FROM usuarios WHERE id = ?`, [usuarioId]);
-
-    res.json({
-      ok: true,
-      message: "Cuenta eliminada exitosamente",
-    });
+    await userRepository.delete(usuarioId);
+    return ok(res, { message: "Cuenta eliminada exitosamente" });
   } catch (error) {
-    console.error("Error al eliminar cuenta:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
+    next(error);
   }
 };
 
-// Listar solo barberos
-export const getBarberos = async (req, res) => {
-  try {
-    const pool = getPool();
-    const query = `SELECT id, nombre, email, telefono FROM usuarios WHERE rol = 'barbero'`;
-    const [rows] = await pool.execute(query);
-    res.json({
-      ok: true,
-      barberos: rows,
-    });
-  } catch (error) {
-    console.error("Error al obtener barberos:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
-  }
-};
-
-export const getCitasDeUsuario = async (req, res) => {
+export const getBarberoPerfil = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { estado } = req.query;
+    const barbero = await userRepository.findById(id);
 
-    const usuario = await userModel.getUserById(id);
-    if (!usuario) {
-      return res.status(404).json({
-        ok: false,
-        message: "Usuario no encontrado",
-      });
+    if (!barbero) {
+      throw new NotFoundError("Barbero no encontrado");
     }
 
-    const pool = getPool();
-    let query = `
-      SELECT c.*,
-             b.nombre as barbero_nombre,
-             s.nombre as servicio_nombre, s.duracion, s.precio
-      FROM citas c
-      JOIN usuarios b ON c.barbero_id = b.id
-      JOIN servicios s ON c.servicio_id = s.id
-      WHERE c.cliente_id = ?
-    `;
-    const params = [id];
-
-    if (estado) {
-      query += " AND c.estado = ?";
-      params.push(estado);
-    }
-
-    query += " ORDER BY c.fecha DESC, c.hora DESC";
-
-    const [citas] = await pool.execute(query, params);
-
-    res.json({
-      ok: true,
-      usuario: { id: usuario.id, nombre: usuario.nombre },
-      citas,
-      total: citas.length,
-    });
-  } catch (error) {
-    console.error("Error al obtener citas de usuario:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Error interno del servidor",
-    });
-  }
-};
-
-export const setHorarioBarbero = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { dia_semana, hora_inicio, hora_fin } = req.body;
-
-    const diasValidos = [
-      "lunes",
-      "martes",
-      "miercoles",
-      "jueves",
-      "viernes",
-      "sabado",
-      "domingo",
-    ];
-    if (!diasValidos.includes(dia_semana)) {
+    if (barbero.rol !== "barbero") {
       return res.status(400).json({
-        ok: false,
-        message: `Día no válido. Use: ${diasValidos.join(", ")}`,
+        success: false,
+        mensaje: "El usuario no es un barbero",
       });
     }
 
-    if (!hora_inicio || !hora_fin) {
-      return res.status(400).json({
-        ok: false,
-        message: "Se requiere hora_inicio y hora_fin",
-      });
-    }
+    // Obtener horarios del barbero
+    const horarios = await userRepository.getHorarioBarbero(id);
 
-    const pool = getPool();
-    await pool.execute(
-      `INSERT INTO horarios_barbero (barbero_id, dia_semana, hora_inicio, hora_fin)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE hora_inicio = ?, hora_fin = ?, activo = TRUE`,
-      [id, dia_semana, hora_inicio, hora_fin, hora_inicio, hora_fin],
-    );
-
-    res.json({
-      ok: true,
-      message: "Horario configurado exitosamente",
+    return ok(res, {
+      barbero: {
+        id: barbero.id,
+        nombre: barbero.nombre,
+        email: barbero.email,
+        telefono: barbero.telefono,
+        rol: barbero.rol,
+      },
+      horarios,
     });
   } catch (error) {
-    console.error("Error al configurar horario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
+    next(error);
   }
 };
 
-export const getHorarioBarbero = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = getPool();
-
-    const [rows] = await pool.execute(
-      "SELECT * FROM horarios_barbero WHERE barbero_id = ? AND activo = TRUE ORDER BY FIELD(dia_semana,'lunes','martes','miercoles','jueves','viernes','sabado','domingo')",
-      [id],
-    );
-
-    res.json({ ok: true, horarios: rows });
-  } catch (error) {
-    console.error("Error al obtener horario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
-  }
+export default {
+  getUsuarios,
+  getUsuarioById,
+  createUsuario,
+  updateUsuario,
+  deleteUsuario,
+  asignarRol,
+  cambiarPasswordAdmin,
+  getBarberos,
+  getBarberoPerfil,
+  getHorarioBarbero,
+  setHorarioBarbero,
+  deleteHorarioBarbero,
+  updateMiPerfil,
+  deleteMiCuenta,
 };
-
-export const deleteHorarioBarbero = async (req, res) => {
-  try {
-    const { id, dia } = req.params;
-    const pool = getPool();
-
-    await pool.execute(
-      "UPDATE horarios_barbero SET activo = FALSE WHERE barbero_id = ? AND dia_semana = ?",
-      [id, dia],
-    );
-
-    res.json({ ok: true, message: "Horario eliminado exitosamente" });
-  } catch (error) {
-    console.error("Error al eliminar horario:", error);
-    res.status(500).json({ ok: false, message: "Error interno del servidor" });
-  }
-};
-
-export default { setHorarioBarbero, getHorarioBarbero, deleteHorarioBarbero };

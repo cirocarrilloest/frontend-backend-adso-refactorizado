@@ -1,10 +1,11 @@
-// src/services/tokenService.js
+// backend/src/services/tokenService.js
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+
 dotenv.config();
 
 /**
- * Genera un token JWT firmado con id, email y rol del usuario.
+ * Genera un token JWT firmado
  */
 export const generarToken = (id, email, rol) => {
   return jwt.sign({ id, email, rol }, process.env.JWT_SECRET, {
@@ -13,7 +14,7 @@ export const generarToken = (id, email, rol) => {
 };
 
 /**
- * Verifica un token JWT. Devuelve los datos decodificados o null si no es válido.
+ * Verifica un token JWT
  */
 export const verifyToken = (token) => {
   try {
@@ -24,13 +25,10 @@ export const verifyToken = (token) => {
   }
 };
 
-/**
- * Blacklist con TTL automático para evitar fuga de memoria.
- * Almacena { token → expiresAt } y limpia entradas expiradas periódicamente.
- */
+// Blacklist de tokens
 const tokenBlacklist = new Map();
 
-// Limpia tokens expirados cada 10 minutos
+// Limpiar tokens expirados cada 10 minutos
 setInterval(
   () => {
     const ahora = Date.now();
@@ -44,7 +42,6 @@ setInterval(
 export const invalidarToken = (token) => {
   try {
     const decoded = jwt.decode(token);
-    // Guardar hasta el momento en que el token expiraría de todas formas
     const exp = decoded?.exp ? decoded.exp * 1000 : Date.now() + 60 * 60 * 1000;
     tokenBlacklist.set(token, exp);
   } catch {
@@ -54,4 +51,11 @@ export const invalidarToken = (token) => {
 
 export const tokenEstaInvalidado = (token) => {
   return tokenBlacklist.has(token);
+};
+
+export default {
+  generarToken,
+  verifyToken,
+  invalidarToken,
+  tokenEstaInvalidado,
 };

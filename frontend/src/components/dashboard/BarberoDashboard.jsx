@@ -2,48 +2,36 @@
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard,
-  Calendar,
   CalendarDays,
   User,
   Zap,
-  RefreshCw,
-  AlertCircle,
-  CheckCircle,
+  CheckCircle2,
   ChevronRight,
 } from "lucide-react";
 import DashboardShell from "./DashboardShell";
 import { useAuth } from "../../context/AuthContext";
-import {
-  getAgendaDia,
-  getResumenCitas,
-  confirmarCita,
-  finalizarCita,
-} from "../../services/citaService";
+import { useCitas } from "../../hooks/useCitas";
 import PerfilView from "./PerfilView";
 import DrawerDetalleCita from "./DrawerDetalleCita";
 import VistaAgendaSemanal from "./VistaAgendaSemanal";
-import WidgetDisponibilidad from "./WidgetDisponibilidad"; // ← NUEVO
+import WidgetDisponibilidad from "./WidgetDisponibilidad";
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
+import { useToast } from "../../context/ToastContext";
 
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-10">
-      <RefreshCw size={20} className="animate-spin text-amber-400" />
-    </div>
-  );
-}
-
-function ErrorBanner({ msg }) {
-  return (
-    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-      <AlertCircle size={16} /> {msg}
-    </div>
-  );
-}
-
-// Vista Inicio con Drawer integrado
 function VistaInicio({ barberoId }) {
+  const { addToast } = useToast();
+  const { citasBarbero, getResumenCitas, confirmarCita, finalizarCita } =
+    useCitas();
   const [citas, setCitas] = useState([]);
-  const [resumen, setResumen] = useState([]);
+  const [resumen, setResumen] = useState({
+    pendiente: 0,
+    confirmada: 0,
+    completada: 0,
+    cancelada: 0,
+    total: 0,
+    ingresos: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(
@@ -55,13 +43,21 @@ function VistaInicio({ barberoId }) {
     setLoading(true);
     setError(null);
     try {
-      const [agenda, res] = await Promise.all([
-        getAgendaDia(fecha),
-        getResumenCitas(),
-      ]);
-      setCitas(agenda.citas || []);
-      setResumen(res.resumen || []);
+      // Cargar resumen de citas del barbero
+      const resumenData = await getResumenCitas();
+      console.log("Resumen recibido:", resumenData);
+      if (resumenData?.resumen) {
+        setResumen(resumenData.resumen);
+      }
+
+      // Cargar citas del día
+      const citasData = await citasBarbero(barberoId, fecha);
+      console.log("Citas del día:", citasData);
+      if (citasData?.citas) {
+        setCitas(citasData.citas);
+      }
     } catch (e) {
+      console.error("Error cargando datos:", e);
       setError(e.response?.data?.message || e.message);
     } finally {
       setLoading(false);
@@ -69,10 +65,11 @@ function VistaInicio({ barberoId }) {
   };
 
   useEffect(() => {
-    cargar(fechaSeleccionada);
-  }, [fechaSeleccionada]);
+    if (barberoId) {
+      cargar(fechaSeleccionada);
+    }
+  }, [barberoId, fechaSeleccionada]);
 
-  // Acciones rápidas con stopPropagation para no abrir el drawer
   const handleConfirmar = async (e, id) => {
     e.stopPropagation();
     try {
@@ -80,8 +77,14 @@ function VistaInicio({ barberoId }) {
       setCitas((prev) =>
         prev.map((c) => (c.id === id ? { ...c, estado: "confirmada" } : c)),
       );
+      // Recargar resumen
+      const resumenData = await getResumenCitas();
+      if (resumenData?.resumen) {
+        setResumen(resumenData.resumen);
+      }
+      addToast("Cita confirmada exitosamente", "success");
     } catch (e) {
-      alert(e.response?.data?.message || e.message);
+      addToast(e.response?.data?.message || e.message, "error");
     }
   };
 
@@ -92,21 +95,33 @@ function VistaInicio({ barberoId }) {
       setCitas((prev) =>
         prev.map((c) => (c.id === id ? { ...c, estado: "completada" } : c)),
       );
+      // Recargar resumen
+      const resumenData = await getResumenCitas();
+      if (resumenData?.resumen) {
+        setResumen(resumenData.resumen);
+      }
+      addToast("Cita completada exitosamente", "success");
     } catch (e) {
-      alert(e.response?.data?.message || e.message);
+      addToast(e.response?.data?.message || e.message, "error");
     }
   };
 
-  // Sincroniza cambios del drawer al estado local
   const handleAccionAgenda = (citaActualizada) => {
-    if (!citaActualizada) return;
-    setCitas((prev) =>
-      prev.map((c) =>
-        c.id === citaActualizada.id
-          ? { ...c, estado: citaActualizada.estado }
-          : c,
-      ),
-    );
+    if (citaActualizada) {
+      setCitas((prev) =>
+        prev.map((c) =>
+          c.id === citaActualizada.id
+            ? { ...c, estado: citaActualizada.estado }
+            : c,
+        ),
+      );
+      // Recargar resumen
+      getResumenCitas().then((resumenData) => {
+        if (resumenData?.resumen) {
+          setResumen(resumenData.resumen);
+        }
+      });
+    }
   };
 
   const estadoStyle = {
@@ -119,52 +134,54 @@ function VistaInicio({ barberoId }) {
     cancelada: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   };
 
-  // Totales del resumen
-  const totalResumen = resumen.reduce((acc, r) => {
-    acc[r.estado] = r.total;
-    return acc;
-  }, {});
+  if (loading) return <Spinner />;
+  if (error)
+    return (
+      <ErrorBanner message={error} onRetry={() => cargar(fechaSeleccionada)} />
+    );
 
   return (
     <>
       <div className="space-y-5">
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            {
-              label: "Completadas",
-              val: totalResumen.completada || 0,
-              color: "text-green-500",
-            },
-            {
-              label: "Confirmadas",
-              val: totalResumen.confirmada || 0,
-              color: "text-blue-500",
-            },
-            {
-              label: "Pendientes",
-              val: totalResumen.pendiente || 0,
-              color: "text-amber-500",
-            },
-            {
-              label: "Canceladas",
-              val: totalResumen.cancelada || 0,
-              color: "text-red-500",
-            },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-white/5 text-center"
-            >
-              <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {s.label}
-              </p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-amber-500">
+              {resumen.pendiente || 0}
+            </p>
+            <p className="text-xs text-gray-500">Pendientes</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-blue-500">
+              {resumen.confirmada || 0}
+            </p>
+            <p className="text-xs text-gray-500">Confirmadas</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-green-500">
+              {resumen.completada || 0}
+            </p>
+            <p className="text-xs text-gray-500">Completadas</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-red-500">
+              {resumen.cancelada || 0}
+            </p>
+            <p className="text-xs text-gray-500">Canceladas</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-purple-500">
+              {resumen.total || 0}
+            </p>
+            <p className="text-xs text-gray-500">Total</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border text-center">
+            <p className="text-2xl font-bold text-emerald-500">
+              ${resumen.ingresos || 0}
+            </p>
+            <p className="text-xs text-gray-500">Ingresos</p>
+          </div>
         </div>
 
-        {/* Agenda */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
             <div>
@@ -182,92 +199,78 @@ function VistaInicio({ barberoId }) {
               className="border border-gray-200 dark:border-white/10 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-1.5 text-sm"
             />
           </div>
-
-          {loading && <Spinner />}
-          {error && (
-            <div className="px-5 pb-4">
-              <ErrorBanner msg={error} />
-            </div>
-          )}
-
-          {!loading && !error && (
-            <div className="divide-y divide-gray-100 dark:divide-white/5">
-              {citas.length === 0 && (
-                <p className="text-sm text-gray-400 px-5 py-6 text-center">
-                  Sin citas para este día
-                </p>
-              )}
-              {citas.map((c) => {
-                const hora =
-                  typeof c.hora === "string" ? c.hora.slice(0, 5) : c.hora;
-                return (
-                  <div
-                    key={c.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setCitaIdDetalle(c.id)}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && setCitaIdDetalle(c.id)
-                    }
-                    className="group flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-inset"
-                  >
-                    <div className="text-center w-12 flex-shrink-0">
-                      <p className="text-xs font-bold text-gray-900 dark:text-white">
-                        {hora}
-                      </p>
-                      <p className="text-xs text-gray-400">{c.duracion}min</p>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {c.cliente_nombre}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {c.servicio_nombre} · ${c.precio}
-                      </p>
-                      {c.notas && (
-                        <p className="text-xs text-gray-400 italic mt-0.5">
-                          "{c.notas}"
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-medium ${estadoStyle[c.estado]}`}
-                      >
-                        {c.estado}
-                      </span>
-                      {c.estado === "pendiente" && (
-                        <button
-                          onClick={(e) => handleConfirmar(e, c.id)}
-                          title="Confirmar"
-                          className="text-blue-500 hover:text-blue-700 transition-colors"
-                        >
-                          <CheckCircle size={16} />
-                        </button>
-                      )}
-                      {c.estado === "confirmada" && (
-                        <button
-                          onClick={(e) => handleFinalizar(e, c.id)}
-                          title="Finalizar"
-                          className="text-green-500 hover:text-green-700 transition-colors"
-                        >
-                          <CheckCircle size={16} />
-                        </button>
-                      )}
-                      <ChevronRight
-                        size={14}
-                        className="text-gray-300 dark:text-gray-600 group-hover:text-amber-400 transition-colors"
-                      />
-                    </div>
+          <div className="divide-y divide-gray-100 dark:divide-white/5">
+            {citas.length === 0 && (
+              <p className="text-sm text-gray-400 px-5 py-6 text-center">
+                Sin citas para este día
+              </p>
+            )}
+            {citas.map((c) => {
+              const hora =
+                typeof c.hora === "string" ? c.hora.slice(0, 5) : c.hora;
+              return (
+                <div
+                  key={c.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setCitaIdDetalle(c.id)}
+                  onKeyDown={(e) => e.key === "Enter" && setCitaIdDetalle(c.id)}
+                  className="group flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-inset"
+                >
+                  <div className="text-center w-12 flex-shrink-0">
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">
+                      {hora}
+                    </p>
+                    <p className="text-xs text-gray-400">{c.duracion}min</p>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {c.cliente_nombre}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {c.servicio_nombre} · ${c.precio}
+                    </p>
+                    {c.notas && (
+                      <p className="text-xs text-gray-400 italic mt-0.5">
+                        "{c.notas}"
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium ${estadoStyle[c.estado]}`}
+                    >
+                      {c.estado}
+                    </span>
+                    {c.estado === "pendiente" && (
+                      <button
+                        onClick={(e) => handleConfirmar(e, c.id)}
+                        title="Confirmar"
+                        className="text-blue-500 hover:text-blue-700 transition-colors"
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                    )}
+                    {c.estado === "confirmada" && (
+                      <button
+                        onClick={(e) => handleFinalizar(e, c.id)}
+                        title="Finalizar"
+                        className="text-green-500 hover:text-green-700 transition-colors"
+                      >
+                        <CheckCircle2 size={16} />
+                      </button>
+                    )}
+                    <ChevronRight
+                      size={14}
+                      className="text-gray-300 dark:text-gray-600 group-hover:text-amber-400 transition-colors"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
-
-      {/* Drawer detalle */}
       <DrawerDetalleCita
         citaId={citaIdDetalle}
         onClose={() => setCitaIdDetalle(null)}
@@ -278,8 +281,6 @@ function VistaInicio({ barberoId }) {
   );
 }
 
-// ── Vista Disponibilidad ──────────────────────────────────────────────────────
-// Wrapper mínimo que pasa el barberoId del usuario autenticado
 function VistaDisponibilidad({ barberoId, barberoNombre }) {
   return (
     <div className="max-w-2xl mx-auto">
@@ -291,7 +292,6 @@ function VistaDisponibilidad({ barberoId, barberoNombre }) {
   );
 }
 
-// Shell principal
 export default function BarberoDashboard() {
   const { usuario } = useAuth();
   const [vista, setVista] = useState("inicio");

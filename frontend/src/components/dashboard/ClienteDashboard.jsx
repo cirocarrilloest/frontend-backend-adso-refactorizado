@@ -1,5 +1,4 @@
 // frontend/src/components/dashboard/ClienteDashboard.jsx
-
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard,
@@ -19,31 +18,19 @@ import {
   getHistorialCitas,
   agendarCita,
   cancelarCita,
+  getHorariosDisponibles as getHorariosDisp,
 } from "../../services/citaService";
 import { getBarberos } from "../../services/usuarioService";
 import { getServicios } from "../../services/servicioService";
-import { getHorariosDisponibles as getHorariosDisp } from "../../services/citaService";
-import PerfilView from "../dashboard/PerfilView.jsx";
-import PerfilBarberoCard from "./PerfilBarberoCard.jsx";
-import VistaMisCitas from "./VistaMisCitas.jsx";
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-8">
-      <RefreshCw size={20} className="animate-spin text-amber-400" />
-    </div>
-  );
-}
+import PerfilView from "./PerfilView";
+import PerfilBarberoCard from "./PerfilBarberoCard";
+import VistaMisCitas from "./VistaMisCitas";
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
+import { useToast } from "../../context/ToastContext";
 
-function ErrorBanner({ msg }) {
-  return (
-    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-      <AlertCircle size={16} /> {msg}
-    </div>
-  );
-}
-
-// ── Vista Inicio ─────────────────────────────────────────────────────────────
 function VistaInicio({ onReservar }) {
+  const { addToast } = useToast();
   const [proximas, setProximas] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,9 +63,10 @@ function VistaInicio({ onReservar }) {
     setCancelando(id);
     try {
       await cancelarCita(id);
+      addToast("Cita cancelada exitosamente", "success");
       cargar();
     } catch (e) {
-      alert(e.response?.data?.message || e.message);
+      addToast(e.response?.data?.message || e.message, "error");
     } finally {
       setCancelando(null);
     }
@@ -93,18 +81,17 @@ function VistaInicio({ onReservar }) {
       "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     cancelada: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   };
-
-  const fmtFecha = (f) => {
-    if (!f) return "";
-    return new Date(f).toLocaleDateString("es-CO", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-    });
-  };
+  const fmtFecha = (f) =>
+    f
+      ? new Date(f).toLocaleDateString("es-CO", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })
+      : "";
 
   if (loading) return <Spinner />;
-  if (error) return <ErrorBanner msg={error} />;
+  if (error) return <ErrorBanner message={error} onRetry={cargar} />;
 
   return (
     <div className="space-y-5">
@@ -142,14 +129,12 @@ function VistaInicio({ onReservar }) {
           </p>
         </div>
       )}
-
       <button
         onClick={onReservar}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 text-gray-500 dark:text-gray-400 hover:border-amber-400 hover:text-amber-500 transition-all text-sm font-medium"
       >
         <Plus size={16} /> Reservar nueva cita
       </button>
-
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-white/5">
         <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5">
           <h2 className="font-semibold text-gray-900 dark:text-white">
@@ -196,11 +181,10 @@ function VistaInicio({ onReservar }) {
   );
 }
 
-// ── Vista Reservar ────────────────────────────────────────────────────────────
-// CAMBIO: paso 2 ahora tiene sub-estado "verPerfil" que muestra PerfilBarberoCard
 function VistaReservar({ onExito }) {
+  const { addToast } = useToast();
   const [paso, setPaso] = useState(1);
-  const [verPerfilBarbero, setVerPerfilBarbero] = useState(false); // ← NUEVO sub-estado paso 2
+  const [verPerfilBarbero, setVerPerfilBarbero] = useState(false);
   const [seleccion, setSeleccion] = useState({
     servicio: null,
     barbero: null,
@@ -223,11 +207,9 @@ function VistaReservar({ onExito }) {
       .then((r) => setBarberos(r.barberos || []))
       .catch(() => {});
   }, []);
-
   useEffect(() => {
     if (paso === 3 && seleccion.barbero && seleccion.fecha) {
       setLoading(true);
-      setHorariosDisp([]);
       getHorariosDisp(seleccion.barbero.id, seleccion.fecha)
         .then((r) => setHorariosDisp(r.horarios_disponibles || []))
         .catch((e) => setError(e.response?.data?.message || e.message))
@@ -245,17 +227,18 @@ function VistaReservar({ onExito }) {
         fecha: seleccion.fecha,
         hora: seleccion.hora,
       });
+      addToast("Cita agendada exitosamente", "success");
       setExito(true);
       setTimeout(onExito, 1800);
     } catch (e) {
       setError(e.response?.data?.message || e.message);
+      addToast(e.response?.data?.message || e.message, "error");
     } finally {
       setEnviando(false);
     }
   };
 
   const pasos = ["Servicio", "Barbero", "Horario", "Confirmar"];
-
   if (exito)
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -268,9 +251,7 @@ function VistaReservar({ onExito }) {
         <p className="text-sm text-gray-400">Redirigiendo…</p>
       </div>
     );
-
-  // ── Sub-vista: perfil del barbero seleccionado (dentro del paso 2) ──────────
-  if (paso === 2 && verPerfilBarbero && seleccion.barbero) {
+  if (paso === 2 && verPerfilBarbero && seleccion.barbero)
     return (
       <div className="max-w-lg mx-auto space-y-4">
         <button
@@ -279,22 +260,18 @@ function VistaReservar({ onExito }) {
         >
           <ChevronLeft size={16} /> Volver a la lista
         </button>
-
         <PerfilBarberoCard
           barberoId={seleccion.barbero.id}
           onReservar={() => {
-            // El barbero ya está seleccionado; avanzar al paso 3
             setVerPerfilBarbero(false);
             setPaso(3);
           }}
         />
       </div>
     );
-  }
 
   return (
     <div className="max-w-lg mx-auto space-y-5">
-      {/* Indicador de pasos */}
       <div className="flex items-center gap-2">
         {pasos.map((p, i) => (
           <React.Fragment key={i}>
@@ -302,14 +279,7 @@ function VistaReservar({ onExito }) {
               className={`flex items-center gap-1.5 ${i + 1 <= paso ? "text-amber-500" : "text-gray-400 dark:text-gray-600"}`}
             >
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors
-                ${
-                  i + 1 < paso
-                    ? "bg-amber-400 border-amber-400 text-gray-900"
-                    : i + 1 === paso
-                      ? "border-amber-400 text-amber-500"
-                      : "border-gray-200 dark:border-white/20"
-                }`}
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${i + 1 < paso ? "bg-amber-400 border-amber-400 text-gray-900" : i + 1 === paso ? "border-amber-400 text-amber-500" : "border-gray-200 dark:border-white/20"}`}
               >
                 {i + 1 < paso ? "✓" : i + 1}
               </div>
@@ -323,11 +293,8 @@ function VistaReservar({ onExito }) {
           </React.Fragment>
         ))}
       </div>
-
-      {error && <ErrorBanner msg={error} />}
-
+      {error && <ErrorBanner message={error} />}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-white/5">
-        {/* Paso 1: Servicio */}
         {paso === 1 && (
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
@@ -353,8 +320,6 @@ function VistaReservar({ onExito }) {
             ))}
           </div>
         )}
-
-        {/* Paso 2: Barbero — MEJORADO: botón "Ver perfil" junto a cada barbero */}
         {paso === 2 && !verPerfilBarbero && (
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">
@@ -366,11 +331,9 @@ function VistaReservar({ onExito }) {
                 key={b.id}
                 className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 dark:border-white/10 hover:border-amber-200 dark:hover:border-amber-800 transition-all"
               >
-                {/* Avatar */}
                 <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-sm font-bold text-amber-700 dark:text-amber-400 flex-shrink-0">
                   {b.nombre?.charAt(0)}
                 </div>
-                {/* Nombre */}
                 <div className="flex-1 min-w-0 text-left">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {b.nombre}
@@ -379,9 +342,7 @@ function VistaReservar({ onExito }) {
                     <p className="text-xs text-gray-400">{b.telefono}</p>
                   )}
                 </div>
-                {/* Acciones */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* ← NUEVO: ver perfil completo antes de seleccionar */}
                   <button
                     onClick={() => {
                       setSeleccion({ ...seleccion, barbero: b });
@@ -391,7 +352,6 @@ function VistaReservar({ onExito }) {
                   >
                     Ver perfil
                   </button>
-                  {/* Seleccionar directamente */}
                   <button
                     onClick={() => {
                       setSeleccion({ ...seleccion, barbero: b });
@@ -412,8 +372,6 @@ function VistaReservar({ onExito }) {
             </button>
           </div>
         )}
-
-        {/* Paso 3: Fecha y hora */}
         {paso === 3 && (
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 dark:text-white">
@@ -441,12 +399,7 @@ function VistaReservar({ onExito }) {
                   <button
                     key={h}
                     onClick={() => setSeleccion({ ...seleccion, hora: h })}
-                    className={`py-2 rounded-lg text-xs font-medium border transition-all
-                      ${
-                        seleccion.hora === h
-                          ? "bg-amber-400 border-amber-400 text-gray-900"
-                          : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-300"
-                      }`}
+                    className={`py-2 rounded-lg text-xs font-medium border transition-all ${seleccion.hora === h ? "bg-amber-400 border-amber-400 text-gray-900" : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-300"}`}
                   >
                     {h}
                   </button>
@@ -470,8 +423,6 @@ function VistaReservar({ onExito }) {
             </div>
           </div>
         )}
-
-        {/* Paso 4: Confirmar */}
         {paso === 4 && (
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 dark:text-white">
@@ -496,7 +447,6 @@ function VistaReservar({ onExito }) {
                 </div>
               ))}
             </div>
-            {error && <ErrorBanner msg={error} />}
             <button
               onClick={handleConfirmar}
               disabled={enviando}
@@ -517,10 +467,8 @@ function VistaReservar({ onExito }) {
   );
 }
 
-// ── Shell ─────────────────────────────────────────────────────────────────────
 export default function ClienteDashboard() {
   const [vista, setVista] = useState("inicio");
-
   const navItems = [
     {
       name: "Inicio",
@@ -543,14 +491,12 @@ export default function ClienteDashboard() {
       onClick: () => setVista("perfil"),
     },
   ];
-
   const titulos = {
     inicio: "Mi Espacio",
     reservar: "Nueva Cita",
     "mis-citas": "Mis Citas",
     perfil: "Mi Perfil",
   };
-
   return (
     <DashboardShell navItems={navItems} titulo={titulos[vista]}>
       {vista === "inicio" && (

@@ -1,25 +1,112 @@
-//src/utils/validador.js
-import joi from "joi"; // Importar la biblioteca Joi para validacion de datos
-// Función para validar los datos de entrada utilizando un esquema definido con Joi
+// backend/src/utils/validador.js
+import joi from "joi";
+
+/**
+ * Validación para registro de usuario
+ */
 export const validarRegistro = (data) => {
   const schema = joi.object({
-    nombre: joi.string().min(2).max(100).required(), // El campo 'nombre' es obligatorio, debe ser una cadena de texto y tener entre 2 y 100 caracteres
-    email: joi.string().email().required(), // El campo 'email' es obligatorio, debe ser una cadena de texto y debe tener formato de correo electrónico
-    pass: joi.string().min(6).required(), // El campo 'pass' es obligatorio, debe ser una cadena de texto y debe tener al menos 6 caracteres
+    nombre: joi.string().min(2).max(100).required(),
+    email: joi.string().email().required(),
+    pass: joi.string().min(6).required(),
     telefono: joi
       .string()
       .pattern(/^[0-9+\-\s()]+$/)
       .min(7)
       .max(20)
-      .optional(), // El campo 'telefono' es opcional, debe ser una cadena de texto que solo contenga números, espacios, guiones, paréntesis o el símbolo '+' y tener entre 7 y 20 caracteres
+      .optional()
+      .allow("", null),
   });
-  return schema.validate(data, { abortEarly: false }); // Validar los datos utilizando el esquema definido y retornar el resultado
+  return schema.validate(data, { abortEarly: false });
 };
-// Función para validar los datos de ingreso utilizando un esquema definido con Joi
+
+/**
+ * Validación para ingreso de usuario
+ */
 export const validarIngreso = (data) => {
   const schema = joi.object({
-    email: joi.string().email().required(), // El campo 'email' es obligatorio, debe ser una cadena de texto y debe tener formato de correo electrónico
-    pass: joi.string().required(), // El campo 'pass' es obligatorio, debe ser una cadena de texto
+    email: joi.string().email().required(),
+    pass: joi.string().required(),
   });
-  return schema.validate(data, { abortEarly: false }); // Validar los datos utilizando el esquema definido y retornar el resultado
+  return schema.validate(data, { abortEarly: false });
+};
+
+/**
+ * Validación para crear/agendar cita
+ */
+export const validarCita = (data) => {
+  const schema = joi.object({
+    barbero_id: joi.number().integer().positive().required(),
+    servicio_id: joi.number().integer().positive().required(),
+    fecha: joi.date().iso().required(),
+    hora: joi
+      .string()
+      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .required(),
+    notas: joi.string().max(500).optional().allow("", null),
+  });
+  return schema.validate(data, { abortEarly: false });
+};
+
+/**
+ * Validación para crear servicio
+ */
+export const validarServicio = (data) => {
+  const schema = joi.object({
+    nombre: joi.string().min(3).max(100).required(),
+    descripcion: joi.string().max(500).optional().allow("", null),
+    duracion: joi.number().integer().min(5).max(240).required(),
+    precio: joi.number().positive().required(),
+    activo: joi.boolean().optional(),
+  });
+  return schema.validate(data, { abortEarly: false });
+};
+
+/**
+ * Validación para ID en parámetros
+ */
+export const validarId = (id) => {
+  const schema = joi.object({
+    id: joi.number().integer().positive().required(),
+  });
+  return schema.validate({ id }, { abortEarly: false });
+};
+
+/**
+ * Validación para horario de barbero
+ */
+export const validarHorario = (data) => {
+  const diasValidos = [
+    "lunes",
+    "martes",
+    "miercoles",
+    "jueves",
+    "viernes",
+    "sabado",
+    "domingo",
+  ];
+  const schema = joi.object({
+    dia_semana: joi
+      .string()
+      .valid(...diasValidos)
+      .required(),
+    hora_inicio: joi
+      .string()
+      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .required(),
+    hora_fin: joi
+      .string()
+      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .required(),
+  });
+  return schema.validate(data, { abortEarly: false });
+};
+
+export default {
+  validarRegistro,
+  validarIngreso,
+  validarCita,
+  validarServicio,
+  validarId,
+  validarHorario,
 };

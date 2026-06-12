@@ -1,121 +1,155 @@
 // frontend/src/hooks/useCitas.js
-/**
- * useCitas.js
- *
- * REFACTORIZACIÓN:
- * - Problema anterior: reimplementaba el patrón useState + try/catch + setLoading
- *   siendo que useApi.js ya existía con exactamente ese patrón
- * - useCitas, useServicios y useUsuarios tenían copias casi idénticas de handleRequest
- * - Solución: usar useApi como base, exponer funciones memoizadas
- *
- * Principio aplicado: DRY — eliminar handleRequest duplicado en 3 hooks
- *
- * NOTA IMPORTANTE: los estados `loading` y `error` de este hook son globales
- * para todas las operaciones del hook. Si necesitas estados independientes por
- * operación, usa useApi directamente:
- *   const { loading, error, ejecutar } = useApi(agendarCita)
- */
-
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { useApi } from "./useApi";
 import * as citaService from "../services/citaService";
 
-/**
- * Wrapper mínimo sobre una función async que maneja loading y error.
- * Versión simplificada de useApi para uso dentro de hooks de dominio.
- */
-function useAsyncOperation() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const ejecutar = useCallback(async (fn, ...args) => {
-    setLoading(true);
-    setError(null);
-    try {
-      return await fn(...args);
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Error en la operación";
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return { loading, error, ejecutar };
-}
-
 export const useCitas = () => {
-  const { loading, error, ejecutar } = useAsyncOperation();
+  // Cliente
+  const misCitasApi = useApi(citaService.getMisCitas);
+  const proximasCitasApi = useApi(citaService.getProximasCitas);
+  const historialCitasApi = useApi(citaService.getHistorialCitas);
+  const crearCitaApi = useApi(citaService.agendarCita, {
+    showSuccess: "Cita agendada exitosamente",
+  });
+  const cancelarCitaApi = useApi(citaService.cancelarCita, {
+    showSuccess: "Cita cancelada exitosamente",
+  });
+  const reagendarCitaApi = useApi(citaService.reagendarCita, {
+    showSuccess: "Cita reagendada exitosamente",
+  });
+
+  // Barbero / Admin
+  const citasBarberoApi = useApi(citaService.getCitasBarbero);
+  const agendaSemanaApi = useApi(citaService.getAgendaSemana);
+  const verificarDisponibilidadApi = useApi(
+    citaService.verificarDisponibilidad,
+  );
+  const confirmarCitaApi = useApi(citaService.confirmarCita, {
+    showSuccess: "Cita confirmada",
+  });
+  const finalizarCitaApi = useApi(citaService.finalizarCita, {
+    showSuccess: "Cita completada",
+  });
+  const actualizarEstadoApi = useApi(citaService.actualizarEstadoCita);
+
+  // ✅ FUNCIÓN FALTANTE - Resumen de citas para barbero
+  const getResumenCitasApi = useApi(citaService.getResumenCitas);
+
+  // Admin
+  const crearCitaAdminApi = useApi(citaService.crearCitaAdmin, {
+    showSuccess: "Cita creada exitosamente",
+  });
+  const getAllCitasApi = useApi(citaService.getAllCitas);
+  const getDashboardApi = useApi(citaService.getDashboard);
+  const getReporteIngresosApi = useApi(citaService.getReporteIngresos);
+  const getServiciosTopApi = useApi(citaService.getServiciosTop);
+  const getClientesTopApi = useApi(citaService.getClientesTop);
+  const getDistribucionHorariaApi = useApi(citaService.getDistribucionHoraria);
+  const getTasaCancelacionApi = useApi(citaService.getTasaCancelacion);
+
+  const loading =
+    misCitasApi.loading ||
+    crearCitaApi.loading ||
+    cancelarCitaApi.loading ||
+    reagendarCitaApi.loading ||
+    confirmarCitaApi.loading ||
+    finalizarCitaApi.loading;
+
+  const error =
+    misCitasApi.error ||
+    crearCitaApi.error ||
+    cancelarCitaApi.error ||
+    reagendarCitaApi.error;
 
   return {
     loading,
     error,
-
     // Cliente
-    misCitas: useCallback(() => ejecutar(citaService.getMisCitas), [ejecutar]),
+    misCitas: useCallback(() => misCitasApi.ejecutar(), [misCitasApi]),
     proximasCitas: useCallback(
-      () => ejecutar(citaService.getProximasCitas),
-      [ejecutar],
+      () => proximasCitasApi.ejecutar(),
+      [proximasCitasApi],
     ),
     historialCitas: useCallback(
-      (limite) => ejecutar(citaService.getHistorialCitas, limite),
-      [ejecutar],
+      (limite) => historialCitasApi.ejecutar(limite),
+      [historialCitasApi],
     ),
     crearCita: useCallback(
-      (data) => ejecutar(citaService.agendarCita, data),
-      [ejecutar],
+      (data) => crearCitaApi.ejecutar(data),
+      [crearCitaApi],
     ),
     cancelarCita: useCallback(
-      (id) => ejecutar(citaService.cancelarCita, id),
-      [ejecutar],
+      (id) => cancelarCitaApi.ejecutar(id),
+      [cancelarCitaApi],
     ),
     reagendarCita: useCallback(
-      (id, data) => ejecutar(citaService.reagendarCita, id, data),
-      [ejecutar],
+      (id, data) => reagendarCitaApi.ejecutar(id, data),
+      [reagendarCitaApi],
     ),
-
-    // Barbero / Admin
+    // Barbero
     citasBarbero: useCallback(
-      (barberoId, fecha) =>
-        ejecutar(citaService.getCitasBarbero, barberoId, fecha),
-      [ejecutar],
+      (barberoId, fecha) => citasBarberoApi.ejecutar(barberoId, fecha),
+      [citasBarberoApi],
     ),
     agendaSemana: useCallback(
-      (barberoId, fecha) =>
-        ejecutar(citaService.getAgendaSemana, barberoId, fecha),
-      [ejecutar],
+      (barberoId, fecha) => agendaSemanaApi.ejecutar(barberoId, fecha),
+      [agendaSemanaApi],
     ),
     verificarDisponibilidad: useCallback(
       (barberoId, fecha, hora) =>
-        ejecutar(citaService.verificarDisponibilidad, barberoId, fecha, hora),
-      [ejecutar],
+        verificarDisponibilidadApi.ejecutar(barberoId, fecha, hora),
+      [verificarDisponibilidadApi],
     ),
     confirmarCita: useCallback(
-      (id) => ejecutar(citaService.confirmarCita, id),
-      [ejecutar],
+      (id) => confirmarCitaApi.ejecutar(id),
+      [confirmarCitaApi],
     ),
     finalizarCita: useCallback(
-      (id) => ejecutar(citaService.finalizarCita, id),
-      [ejecutar],
+      (id) => finalizarCitaApi.ejecutar(id),
+      [finalizarCitaApi],
     ),
     actualizarEstado: useCallback(
-      (id, estado) => ejecutar(citaService.actualizarEstadoCita, id, estado),
-      [ejecutar],
+      (id, estado) => actualizarEstadoApi.ejecutar(id, estado),
+      [actualizarEstadoApi],
     ),
-
+    // ✅ NUEVA FUNCIÓN - Resumen de citas
+    getResumenCitas: useCallback(
+      () => getResumenCitasApi.ejecutar(),
+      [getResumenCitasApi],
+    ),
     // Admin
     crearCitaAdmin: useCallback(
-      (data) => ejecutar(citaService.crearCitaAdmin, data),
-      [ejecutar],
+      (data) => crearCitaAdminApi.ejecutar(data),
+      [crearCitaAdminApi],
     ),
     getAllCitas: useCallback(
-      (filtros) => ejecutar(citaService.getAllCitas, filtros),
-      [ejecutar],
+      (filtros) => getAllCitasApi.ejecutar(filtros),
+      [getAllCitasApi],
     ),
     getDashboard: useCallback(
-      () => ejecutar(citaService.getDashboard),
-      [ejecutar],
+      () => getDashboardApi.ejecutar(),
+      [getDashboardApi],
+    ),
+    getReporteIngresos: useCallback(
+      (periodo, inicio, fin) =>
+        getReporteIngresosApi.ejecutar(periodo, inicio, fin),
+      [getReporteIngresosApi],
+    ),
+    getServiciosTop: useCallback(
+      (limite, inicio, fin) => getServiciosTopApi.ejecutar(limite, inicio, fin),
+      [getServiciosTopApi],
+    ),
+    getClientesTop: useCallback(
+      (limite, inicio, fin) => getClientesTopApi.ejecutar(limite, inicio, fin),
+      [getClientesTopApi],
+    ),
+    getDistribucionHoraria: useCallback(
+      (inicio, fin) => getDistribucionHorariaApi.ejecutar(inicio, fin),
+      [getDistribucionHorariaApi],
+    ),
+    getTasaCancelacion: useCallback(
+      (inicio, fin) => getTasaCancelacionApi.ejecutar(inicio, fin),
+      [getTasaCancelacionApi],
     ),
   };
 };

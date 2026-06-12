@@ -1,87 +1,119 @@
-// frontend/src/hooks/useUsuarios.js
-import { useState, useCallback } from "react";
-import {
-  getUsuarios,
-  getUsuarioById,
-  createUsuario,
-  updateUsuario,
-  deleteUsuario,
-  getBarberos,
-  getPerfilBarbero,
-  getHorarioBarbero,
-  setHorarioBarbero,
-  deleteHorarioBarbero,
-} from "../services/usuarioService";
+// src/hooks/useUsuarios.js
+import { useCallback } from "react";
+import { useApi } from "./useApi";
+import * as usuarioService from "../services/usuarioService";
 
+/**
+ * Hook para manejar operaciones de usuarios
+ * Usa useApi internamente para estandarizar loading/error
+ */
 export const useUsuarios = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // Operaciones CRUD básicas
+  const listarApi = useApi(usuarioService.getUsuarios, { showError: false });
+  const obtenerApi = useApi(usuarioService.getUsuarioById);
+  const crearApi = useApi(usuarioService.createUsuario, {
+    showSuccess: "Usuario creado exitosamente",
+  });
+  const actualizarApi = useApi(usuarioService.updateUsuario, {
+    showSuccess: "Usuario actualizado exitosamente",
+  });
+  const eliminarApi = useApi(usuarioService.deleteUsuario, {
+    showSuccess: "Usuario eliminado exitosamente",
+  });
+  const cambiarRolApi = useApi(usuarioService.asignarRol, {
+    showSuccess: "Rol actualizado exitosamente",
+  });
+  const cambiarPasswordApi = useApi(usuarioService.cambiarPasswordAdmin, {
+    showSuccess: "Contraseña actualizada",
+  });
 
-  const handleRequest = useCallback(async (fn, ...args) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fn(...args);
-      return result;
-    } catch (err) {
-      const message =
-        err.response?.data?.message || err.message || "Error en la operación";
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Wrappers para llamar las funciones
   const listar = useCallback(
-    (filtros) => handleRequest(getUsuarios, filtros),
-    [handleRequest],
+    (filtros) => listarApi.ejecutar(filtros),
+    [listarApi],
   );
-  const obtener = useCallback(
-    (id) => handleRequest(getUsuarioById, id),
-    [handleRequest],
-  );
-  const crear = useCallback(
-    (data) => handleRequest(createUsuario, data),
-    [handleRequest],
-  );
+
+  const obtener = useCallback((id) => obtenerApi.ejecutar(id), [obtenerApi]);
+
+  const crear = useCallback((data) => crearApi.ejecutar(data), [crearApi]);
+
   const actualizar = useCallback(
-    (id, data) => handleRequest(updateUsuario, id, data),
-    [handleRequest],
+    (id, data) => actualizarApi.ejecutar(id, data),
+    [actualizarApi],
   );
-  const eliminar = useCallback(
-    (id) => handleRequest(deleteUsuario, id),
-    [handleRequest],
+
+  const eliminar = useCallback((id) => eliminarApi.ejecutar(id), [eliminarApi]);
+
+  const cambiarRol = useCallback(
+    (id, rol) => cambiarRolApi.ejecutar(id, rol),
+    [cambiarRolApi],
   );
+
+  const cambiarPassword = useCallback(
+    (id, pass) => cambiarPasswordApi.ejecutar(id, pass),
+    [cambiarPasswordApi],
+  );
+
+  // Funciones específicas de barberos
+  const listarBarberosApi = useApi(usuarioService.getBarberos);
+  const perfilBarberoApi = useApi(usuarioService.getPerfilBarbero);
+  const horarioBarberoApi = useApi(usuarioService.getHorarioBarbero);
+  const configurarHorarioApi = useApi(usuarioService.setHorarioBarbero, {
+    showSuccess: "Horario configurado",
+  });
+  const eliminarHorarioApi = useApi(usuarioService.deleteHorarioBarbero, {
+    showSuccess: "Horario eliminado",
+  });
+
   const listarBarberos = useCallback(
-    () => handleRequest(getBarberos),
-    [handleRequest],
+    () => listarBarberosApi.ejecutar(),
+    [listarBarberosApi],
   );
   const perfilBarbero = useCallback(
-    (id) => handleRequest(getPerfilBarbero, id),
-    [handleRequest],
+    (id) => perfilBarberoApi.ejecutar(id),
+    [perfilBarberoApi],
   );
   const horarioBarbero = useCallback(
-    (id) => handleRequest(getHorarioBarbero, id),
-    [handleRequest],
+    (id) => horarioBarberoApi.ejecutar(id),
+    [horarioBarberoApi],
   );
   const configurarHorario = useCallback(
-    (id, data) => handleRequest(setHorarioBarbero, id, data),
-    [handleRequest],
+    (id, data) => configurarHorarioApi.ejecutar(id, data),
+    [configurarHorarioApi],
   );
   const eliminarHorario = useCallback(
-    (id, dia) => handleRequest(deleteHorarioBarbero, id, dia),
-    [handleRequest],
+    (id, dia) => eliminarHorarioApi.ejecutar(id, dia),
+    [eliminarHorarioApi],
   );
 
+  // Estados combinados
+  const loading =
+    listarApi.loading ||
+    obtenerApi.loading ||
+    crearApi.loading ||
+    actualizarApi.loading ||
+    eliminarApi.loading;
+
+  const error =
+    listarApi.error ||
+    obtenerApi.error ||
+    crearApi.error ||
+    actualizarApi.error ||
+    eliminarApi.error;
+
   return {
+    // Estados
     loading,
     error,
+    // Operaciones CRUD
     listar,
     obtener,
     crear,
     actualizar,
     eliminar,
+    cambiarRol,
+    cambiarPassword,
+    // Operaciones de barberos
     listarBarberos,
     perfilBarbero,
     horarioBarbero,

@@ -19,11 +19,11 @@ import {
 import { getMisCitas, cancelarCita } from "../../services/citaService";
 import ModalReagendar from "./ModalReagendar";
 import DrawerDetalleCita from "./DrawerDetalleCita";
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+import { Spinner } from "../ui/Spinner";
+import { ErrorBanner } from "../ui/ErrorBanner";
+import { useToast } from "../../context/ToastContext";
 
 const ESTADOS = ["todos", "pendiente", "confirmada", "completada", "cancelada"];
-
 const ESTADO_META = {
   pendiente: {
     label: "Pendiente",
@@ -52,73 +52,31 @@ const ESTADO_META = {
     Icon: XCircle,
   },
 };
-
-const fmtFecha = (raw) => {
-  if (!raw) return "—";
-  const d = new Date(String(raw).includes("T") ? raw : raw + "T00:00:00");
-  return d.toLocaleDateString("es-CO", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-};
-
+const fmtFecha = (raw) =>
+  raw
+    ? new Date(
+        String(raw).includes("T") ? raw : raw + "T00:00:00",
+      ).toLocaleDateString("es-CO", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 const fmtPrecio = (n) =>
   Number(n).toLocaleString("es-CO", {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
   });
-
-const mesKey = (raw) => {
-  if (!raw) return "";
-  const s = String(raw).split("T")[0];
-  return s.slice(0, 7);
-};
-
-// ── subcomponentes ────────────────────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <div className="flex items-center justify-center py-16">
-      <RefreshCw size={22} className="animate-spin text-amber-400" />
-    </div>
-  );
-}
-
-function EmptyState({ filtroActivo }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
-        <Calendar size={28} className="text-gray-400" />
-      </div>
-      <p className="font-semibold text-gray-700 dark:text-gray-300">
-        {filtroActivo ? "Sin resultados" : "Aún no tienes citas"}
-      </p>
-      <p className="text-xs text-gray-400 max-w-xs">
-        {filtroActivo
-          ? "Prueba cambiando el filtro o la búsqueda."
-          : "Cuando reserves tu primera cita aparecerá aquí."}
-      </p>
-    </div>
-  );
-}
+const mesKey = (raw) => (raw ? String(raw).split("T")[0].slice(0, 7) : "");
 
 function EstadoChip({ estado, activo, count, onClick }) {
   const meta = ESTADO_META[estado];
   return (
     <button
       onClick={onClick}
-      className={`
-        flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
-        border transition-all whitespace-nowrap
-        ${
-          activo
-            ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm"
-            : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-amber-300"
-        }
-      `}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all whitespace-nowrap ${activo ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:border-amber-300"}`}
     >
       {meta ? (
         <>
@@ -156,18 +114,7 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
       className="group relative flex items-start gap-4 px-5 py-4 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03] border-b border-gray-100 dark:border-white/5 last:border-0 outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-inset"
     >
       <div
-        className={`
-        w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5
-        ${
-          cita.estado === "completada"
-            ? "bg-green-100 dark:bg-green-900/30"
-            : cita.estado === "confirmada"
-              ? "bg-blue-100 dark:bg-blue-900/20"
-              : cita.estado === "pendiente"
-                ? "bg-amber-100 dark:bg-amber-900/20"
-                : "bg-gray-100 dark:bg-gray-700/40"
-        }
-      `}
+        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${cita.estado === "completada" ? "bg-green-100 dark:bg-green-900/30" : cita.estado === "confirmada" ? "bg-blue-100 dark:bg-blue-900/20" : cita.estado === "pendiente" ? "bg-amber-100 dark:bg-amber-900/20" : "bg-gray-100 dark:bg-gray-700/40"}`}
       >
         <Icon
           size={16}
@@ -182,7 +129,6 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
           }
         />
       </div>
-
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">
@@ -194,7 +140,6 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
             {meta.label}
           </span>
         </div>
-
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
           <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
             <Scissors size={11} /> {cita.barbero_nombre}
@@ -206,7 +151,6 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
             <Clock size={11} /> {hora}
           </span>
         </div>
-
         <div className="flex items-center justify-between mt-2">
           <span className="text-sm font-bold text-gray-700 dark:text-gray-200">
             {fmtPrecio(cita.precio)}
@@ -214,7 +158,6 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
           <span className="text-xs text-gray-400">{cita.duracion} min</span>
         </div>
       </div>
-
       <div className="flex items-center gap-1 flex-shrink-0">
         {esPendiente && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -254,8 +197,8 @@ function CitaRow({ cita, onVerDetalle, onCancelar, onReagendar, cancelando }) {
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
 export default function VistaMisCitas() {
+  const { addToast } = useToast();
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -273,10 +216,8 @@ export default function VistaMisCitas() {
       const r = await getMisCitas();
       const lista = r.citas || [];
       setCitas(lista);
-      if (lista.length > 0) {
-        const primerMes = mesKey(lista[0].fecha);
-        setMesesExpandidos({ [primerMes]: true });
-      }
+      if (lista.length > 0)
+        setMesesExpandidos({ [mesKey(lista[0].fecha)]: true });
     } catch (e) {
       setError(
         e.response?.data?.message ||
@@ -301,8 +242,9 @@ export default function VistaMisCitas() {
         prev.map((c) => (c.id === id ? { ...c, estado: "cancelada" } : c)),
       );
       if (citaIdDetalle === id) setCitaIdDetalle(null);
+      addToast("Cita cancelada exitosamente", "success");
     } catch (e) {
-      alert(e.response?.data?.message || e.message);
+      addToast(e.response?.data?.message || e.message, "error");
     } finally {
       setCancelando(null);
     }
@@ -312,26 +254,23 @@ export default function VistaMisCitas() {
     setCitas((prev) =>
       prev.map((c) =>
         c.id === citaActualizada.id
-          ? {
-              ...c,
-              fecha: citaActualizada.fecha,
-              hora: citaActualizada.hora,
-            }
+          ? { ...c, fecha: citaActualizada.fecha, hora: citaActualizada.hora }
           : c,
       ),
     );
     setCitaReagendando(null);
+    addToast("Cita reagendada exitosamente", "success");
   };
 
   const handleAccionDetalle = (citaActualizada) => {
-    if (!citaActualizada) return;
-    setCitas((prev) =>
-      prev.map((c) =>
-        c.id === citaActualizada.id
-          ? { ...c, estado: citaActualizada.estado }
-          : c,
-      ),
-    );
+    if (citaActualizada)
+      setCitas((prev) =>
+        prev.map((c) =>
+          c.id === citaActualizada.id
+            ? { ...c, estado: citaActualizada.estado }
+            : c,
+        ),
+      );
   };
 
   const citasFiltradas = useMemo(() => {
@@ -371,20 +310,7 @@ export default function VistaMisCitas() {
     setMesesExpandidos((prev) => ({ ...prev, [k]: !prev[k] }));
 
   if (loading) return <Spinner />;
-
-  if (error)
-    return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <AlertCircle size={24} className="text-red-400" />
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        <button
-          onClick={cargar}
-          className="text-xs text-amber-500 hover:text-amber-600 flex items-center gap-1"
-        >
-          <RefreshCw size={12} /> Reintentar
-        </button>
-      </div>
-    );
+  if (error) return <ErrorBanner message={error} onRetry={cargar} />;
 
   return (
     <>
@@ -396,8 +322,7 @@ export default function VistaMisCitas() {
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {citas.length}{" "}
-              {citas.length === 1 ? "cita registrada" : "citas registradas"}
-              {" · "}
+              {citas.length === 1 ? "cita registrada" : "citas registradas"} ·{" "}
               <span className="text-amber-500">
                 Clic en una fila para ver detalle
               </span>
@@ -410,7 +335,6 @@ export default function VistaMisCitas() {
             <RefreshCw size={15} />
           </button>
         </div>
-
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
           {ESTADOS.map((e) => (
             <EstadoChip
@@ -422,7 +346,6 @@ export default function VistaMisCitas() {
             />
           ))}
         </div>
-
         <div className="relative">
           <Search
             size={14}
@@ -433,15 +356,7 @@ export default function VistaMisCitas() {
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar servicio o barbero…"
-            className="
-              w-full pl-9 pr-4 py-2.5 text-sm rounded-xl
-              border border-gray-200 dark:border-white/10
-              bg-white dark:bg-gray-800
-              text-gray-900 dark:text-white
-              placeholder:text-gray-400
-              focus:outline-none focus:ring-2 focus:ring-amber-400
-              transition
-            "
+            className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
           />
           {busqueda && (
             <button
@@ -452,11 +367,22 @@ export default function VistaMisCitas() {
             </button>
           )}
         </div>
-
         {grupos.length === 0 ? (
-          <EmptyState
-            filtroActivo={filtroEstado !== "todos" || !!busqueda.trim()}
-          />
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center">
+              <Calendar size={28} className="text-gray-400" />
+            </div>
+            <p className="font-semibold text-gray-700 dark:text-gray-300">
+              {filtroEstado !== "todos" || !!busqueda.trim()
+                ? "Sin resultados"
+                : "Aún no tienes citas"}
+            </p>
+            <p className="text-xs text-gray-400 max-w-xs">
+              {filtroEstado !== "todos" || !!busqueda.trim()
+                ? "Prueba cambiando el filtro o la búsqueda."
+                : "Cuando reserves tu primera cita aparecerá aquí."}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {grupos.map(([k, items]) => {
@@ -467,7 +393,6 @@ export default function VistaMisCitas() {
                 Number(mes) - 1,
                 1,
               ).toLocaleDateString("es-CO", { month: "long", year: "numeric" });
-
               return (
                 <div
                   key={k}
@@ -475,12 +400,7 @@ export default function VistaMisCitas() {
                 >
                   <button
                     onClick={() => toggleMes(k)}
-                    className="
-                        w-full flex items-center justify-between
-                        px-5 py-3.5
-                        hover:bg-gray-50 dark:hover:bg-white/[0.03]
-                        transition-colors
-                      "
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
@@ -496,7 +416,6 @@ export default function VistaMisCitas() {
                       className={`text-gray-400 transition-transform duration-200 ${abierto ? "rotate-180" : ""}`}
                     />
                   </button>
-
                   {abierto && (
                     <div className="border-t border-gray-100 dark:border-white/5">
                       {items.map((c) => (
@@ -517,14 +436,12 @@ export default function VistaMisCitas() {
           </div>
         )}
       </div>
-
       <DrawerDetalleCita
         citaId={citaIdDetalle}
         onClose={() => setCitaIdDetalle(null)}
         rol="cliente"
         onAccion={handleAccionDetalle}
       />
-
       {citaReagendando && (
         <ModalReagendar
           cita={citaReagendando}

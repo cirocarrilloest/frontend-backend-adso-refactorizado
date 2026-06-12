@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { getAllCitas } from "../../services/citaService";
 import DrawerDetalleCita from "../dashboard/DrawerDetalleCita";
+import { useToast } from "../../context/ToastContext";
 
-// Formateadores
 const fmtFecha = (raw) => {
   if (!raw) return "—";
   const d = new Date(raw);
@@ -59,71 +59,60 @@ const ESTADOS_FILTRO = [
 ];
 
 export default function VistaTodasLasCitas() {
+  const { addToast } = useToast();
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Filtros
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroFechaInicio, setFiltroFechaInicio] = useState("");
   const [filtroFechaFin, setFiltroFechaFin] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-
-  // Paginación
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [totalCitas, setTotalCitas] = useState(0);
-  const itemsPorPagina = 15;
-
-  // Drawer detalle
   const [citaSeleccionadaId, setCitaSeleccionadaId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const itemsPorPagina = 15;
 
   const cargarCitas = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = {
-        page: pagina,
-        limit: itemsPorPagina,
-      };
+      const params = { page: pagina, limit: itemsPorPagina };
       if (filtroEstado) params.estado = filtroEstado;
       if (filtroFechaInicio) params.fecha_desde = filtroFechaInicio;
       if (filtroFechaFin) params.fecha_hasta = filtroFechaFin;
 
       const response = await getAllCitas(params);
-
-      // Soporta tanto respuesta paginada como array plano
-      if (response.citas && Array.isArray(response.citas)) {
-        setCitas(response.citas);
-        setTotalPaginas(
-          response.totalPages ||
-            Math.ceil(response.total / itemsPorPagina) ||
-            1,
-        );
-        setTotalCitas(response.total || response.citas.length);
-      } else if (Array.isArray(response)) {
-        setCitas(response);
-        setTotalPaginas(Math.ceil(response.length / itemsPorPagina));
-        setTotalCitas(response.length);
-      } else {
-        setCitas([]);
-        setTotalPaginas(1);
-        setTotalCitas(0);
-      }
+      setCitas(response.citas || []);
+      setTotalPaginas(
+        response.totalPages ||
+          Math.ceil((response.total || 0) / itemsPorPagina) ||
+          1,
+      );
+      setTotalCitas(response.total || 0);
     } catch (err) {
       setError(err.response?.data?.message || "Error al cargar las citas");
-      setCitas([]);
+      addToast(
+        err.response?.data?.message || "Error al cargar las citas",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
-  }, [pagina, filtroEstado, filtroFechaInicio, filtroFechaFin, itemsPorPagina]);
+  }, [
+    pagina,
+    filtroEstado,
+    filtroFechaInicio,
+    filtroFechaFin,
+    itemsPorPagina,
+    addToast,
+  ]);
 
   useEffect(() => {
     cargarCitas();
   }, [cargarCitas]);
 
-  // Resetear página al cambiar filtros
   useEffect(() => {
     setPagina(1);
   }, [filtroEstado, filtroFechaInicio, filtroFechaFin]);
@@ -151,7 +140,6 @@ export default function VistaTodasLasCitas() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -170,8 +158,7 @@ export default function VistaTodasLasCitas() {
                 : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
             }`}
           >
-            <Filter size={16} />
-            Filtros
+            <Filter size={16} /> Filtros
             {(filtroEstado || filtroFechaInicio || filtroFechaFin) && (
               <span className="w-2 h-2 rounded-full bg-amber-500" />
             )}
@@ -181,13 +168,12 @@ export default function VistaTodasLasCitas() {
             disabled={loading}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />{" "}
             Actualizar
           </button>
         </div>
       </div>
 
-      {/* Filtros expandibles */}
       {showFilters && (
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-3">
           <div className="flex justify-between items-center mb-2">
@@ -209,7 +195,7 @@ export default function VistaTodasLasCitas() {
               <select
                 value={filtroEstado}
                 onChange={(e) => setFiltroEstado(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500"
               >
                 {ESTADOS_FILTRO.map((est) => (
                   <option key={est.value} value={est.value}>
@@ -226,7 +212,7 @@ export default function VistaTodasLasCitas() {
                 type="date"
                 value={filtroFechaInicio}
                 onChange={(e) => setFiltroFechaInicio(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500"
               />
             </div>
             <div>
@@ -237,23 +223,20 @@ export default function VistaTodasLasCitas() {
                 type="date"
                 value={filtroFechaFin}
                 onChange={(e) => setFiltroFechaFin(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-amber-500"
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* Tabla de citas */}
       <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-        {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-20">
             <RefreshCw size={28} className="animate-spin text-amber-400" />
           </div>
         )}
 
-        {/* Error */}
         {!loading && error && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-red-500 text-sm mb-3">{error}</p>
@@ -266,7 +249,6 @@ export default function VistaTodasLasCitas() {
           </div>
         )}
 
-        {/* Tabla */}
         {!loading && !error && (
           <>
             <div className="overflow-x-auto">
@@ -330,24 +312,22 @@ export default function VistaTodasLasCitas() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-gray-900 dark:text-white">
-                            {cita.cliente_nombre || cita.cliente?.nombre || "—"}
+                            {cita.cliente_nombre || "—"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-gray-900 dark:text-white">
-                            {cita.barbero_nombre || cita.barbero?.nombre || "—"}
+                            {cita.barbero_nombre || "—"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-gray-700 dark:text-gray-300">
-                            {cita.servicio_nombre ||
-                              cita.servicio?.nombre ||
-                              "—"}
+                            {cita.servicio_nombre || "—"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {fmtPrecio(cita.precio || cita.servicio?.precio)}
+                            {fmtPrecio(cita.precio)}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -373,7 +353,6 @@ export default function VistaTodasLasCitas() {
               </table>
             </div>
 
-            {/* Paginación */}
             {totalPaginas > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -406,7 +385,6 @@ export default function VistaTodasLasCitas() {
         )}
       </div>
 
-      {/* Drawer de detalle */}
       <DrawerDetalleCita
         citaId={citaSeleccionadaId}
         onClose={handleCerrarDrawer}

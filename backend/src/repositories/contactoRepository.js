@@ -1,21 +1,9 @@
-// src/repositories/contactoRepository.js
-/**
- * contactoRepository.js
- *
- * REFACTORIZACIÓN NUEVA:
- * - Problema anterior: contactoController.js llamaba getPool() directamente
- *   mezclando acceso a datos con lógica HTTP
- * - Solución: separar todo el SQL en este repositorio
- *
- * Principio aplicado: Repository Pattern + SRP
- */
-
+// backend/src/repositories/contactoRepository.js
 import { getPool } from "../config/db.js";
 
 export const contactoRepository = {
   /**
-   * Inserta un nuevo mensaje de contacto.
-   * Retorna el ID del registro creado.
+   * Inserta un nuevo mensaje de contacto
    */
   async crear({ nombre, email, mensaje }) {
     const pool = getPool();
@@ -28,13 +16,11 @@ export const contactoRepository = {
   },
 
   /**
-   * Retorna todos los mensajes, opcionalmente filtrando no leídos.
+   * Retorna todos los mensajes
    */
   async getAll({ soloNoLeidos = false, limite = 50 } = {}) {
     const pool = getPool();
-
-    // Normalizar límite para evitar inyecciones por template string
-    const limiteNum = Math.max(1, Math.min(100, parseInt(limite, 10) || 50));
+    const limiteNum = Math.max(1, Math.min(100, parseInt(limite) || 50));
 
     let query = "SELECT * FROM contacto_mensajes";
     const params = [];
@@ -50,8 +36,7 @@ export const contactoRepository = {
   },
 
   /**
-   * Marca un mensaje como leído.
-   * Retorna true si el registro existía y fue actualizado.
+   * Marca un mensaje como leído
    */
   async marcarLeido(id) {
     const pool = getPool();
@@ -63,8 +48,7 @@ export const contactoRepository = {
   },
 
   /**
-   * Obtiene los IDs de todos los usuarios con rol admin.
-   * Usado para enviar notificaciones al recibir un mensaje nuevo.
+   * Obtiene los IDs de todos los usuarios admin
    */
   async getAdminIds() {
     const pool = getPool();

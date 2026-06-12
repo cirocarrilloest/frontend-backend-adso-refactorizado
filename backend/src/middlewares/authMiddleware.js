@@ -1,40 +1,36 @@
-//src/middlewares/authMiddleware.js
-import { verifyToken } from "../services/tokenService.js"; //importar función de verificación de token
-//middleware de autenticación para proteger rutas que requieren autenticación
+// backend/src/middlewares/authMiddleware.js
+import { verifyToken } from "../services/tokenService.js";
+import { UnauthorizedError } from "../utils/errors.js";
+
+/**
+ * Middleware de autenticación
+ * Verifica que el token sea válido y añade el usuario a req
+ */
 export const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.header("Authorization"); //obtener encabezado de autorización
+    const authHeader = req.header("Authorization");
     if (!authHeader) {
-      return res.status(401).json({
-        ok: false,
-        message: "no se proporcionó token de autenticación",
-      }); //si no hay encabezado, devolver error 401
+      throw new UnauthorizedError("No se proporcionó token de autenticación");
     }
 
     if (!authHeader.startsWith("Bearer ")) {
-      //verificar que el encabezado tenga el formato correcto "Bearer <token>"
-      return res.status(401).json({
-        ok: false,
-        message: "formato de token no válido. se espera 'Bearer <token>'",
-      }); //si el formato del token no es válido, devolver error 401
+      throw new UnauthorizedError(
+        'Formato de token no válido. Se espera "Bearer <token>"',
+      );
     }
-    const token = authHeader.substring(7); //extraer token del encabezado (eliminar "Bearer ")
-    const decoded = verifyToken(token); //verificar token y obtener datos decodificados
+
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
 
     if (!decoded) {
-      //si el token no es válido, decoded será null o undefined
-      return res.status(403).json({
-        ok: false,
-        message: "token invalido o expirado",
-      }); //si el token no es válido, devolver error 403
+      throw new UnauthorizedError("Token inválido o expirado");
     }
-    req.usuario = decoded; //agregar datos del usuario al objeto de solicitud para su uso en rutas protegidas
-    next(); //continuar con la siguiente función de middleware o ruta
+
+    req.usuario = decoded;
+    next();
   } catch (error) {
-    console.error("Error en el middleware de autenticación:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "error interno del servidor",
-    }); //si ocurre un error, devolver error 500
+    next(error);
   }
 };
+
+export default authMiddleware;

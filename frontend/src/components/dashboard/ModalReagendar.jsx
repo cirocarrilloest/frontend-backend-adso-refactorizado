@@ -1,5 +1,4 @@
 // frontend/src/components/dashboard/ModalReagendar.jsx
-
 import React, { useState, useEffect, useCallback } from "react";
 import {
   X,
@@ -16,8 +15,7 @@ import {
   reagendarCita,
   getHorariosDisponibles,
 } from "../../services/citaService";
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+import { useToast } from "../../context/ToastContext";
 
 const HOY = new Date().toISOString().split("T")[0];
 
@@ -34,7 +32,6 @@ const fmtFecha = (raw) => {
 
 const fmtHora = (raw) => String(raw || "").slice(0, 5);
 
-// ── Paso 1: resumen de la cita actual ────────────────────────────────────────
 function PasoResumen({ cita, onContinuar }) {
   return (
     <div className="space-y-5">
@@ -92,22 +89,14 @@ function PasoResumen({ cita, onContinuar }) {
 
       <button
         onClick={onContinuar}
-        className="
-          w-full flex items-center justify-center gap-2
-          bg-amber-400 hover:bg-amber-300 active:bg-amber-500
-          text-gray-900 font-bold text-sm
-          py-3 rounded-xl transition-colors
-          shadow-sm shadow-amber-200 dark:shadow-amber-900/20
-        "
+        className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-gray-900 font-bold text-sm py-3 rounded-xl transition-colors shadow-sm shadow-amber-200 dark:shadow-amber-900/20"
       >
-        Elegir nueva fecha
-        <ChevronRight size={16} />
+        Elegir nueva fecha <ChevronRight size={16} />
       </button>
     </div>
   );
 }
 
-// ── Paso 2: seleccionar fecha y hora ─────────────────────────────────────────
 function PasoFechaHora({
   cita,
   fecha,
@@ -137,12 +126,12 @@ function PasoFechaHora({
         setCargando(false);
       }
     },
-    [cita.barbero_id],
+    [cita.barbero_id, setHora],
   );
 
   useEffect(() => {
     if (fecha) cargarHorarios(fecha);
-  }, [fecha]);
+  }, [fecha, cargarHorarios]);
 
   const cambiarFecha = (f) => {
     setFecha(f);
@@ -152,7 +141,6 @@ function PasoFechaHora({
 
   return (
     <div className="space-y-5">
-      {/* Selector de fecha */}
       <div>
         <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
           Nueva fecha
@@ -162,35 +150,25 @@ function PasoFechaHora({
           min={HOY}
           value={fecha}
           onChange={(e) => cambiarFecha(e.target.value)}
-          className="
-            w-full border border-gray-200 dark:border-white/10
-            dark:bg-gray-700/60 dark:text-white
-            rounded-xl px-4 py-3 text-sm
-            focus:outline-none focus:ring-2 focus:ring-amber-400
-            transition
-          "
+          className="w-full border border-gray-200 dark:border-white/10 dark:bg-gray-700/60 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 transition"
         />
       </div>
 
-      {/* Horarios disponibles */}
       {fecha && (
         <div>
           <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
             Hora disponible
           </label>
-
           {cargando && (
             <div className="flex items-center justify-center py-6">
               <RefreshCw size={18} className="animate-spin text-amber-400" />
             </div>
           )}
-
           {!cargando && errorHorarios && (
             <p className="text-xs text-red-500 dark:text-red-400 text-center py-4">
               {errorHorarios}
             </p>
           )}
-
           {!cargando && !errorHorarios && horarios.length === 0 && (
             <div className="text-center py-6 rounded-xl bg-gray-50 dark:bg-gray-700/30">
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -201,21 +179,17 @@ function PasoFechaHora({
               </p>
             </div>
           )}
-
           {!cargando && horarios.length > 0 && (
             <div className="grid grid-cols-4 gap-2">
               {horarios.map((h) => (
                 <button
                   key={h}
                   onClick={() => setHora(h)}
-                  className={`
-                    py-2.5 rounded-xl text-xs font-semibold border transition-all
-                    ${
-                      hora === h
-                        ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm"
-                        : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-300 dark:hover:border-amber-600 bg-white dark:bg-gray-700/40"
-                    }
-                  `}
+                  className={`py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                    hora === h
+                      ? "bg-amber-400 border-amber-400 text-gray-900 shadow-sm"
+                      : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:border-amber-300 dark:hover:border-amber-600 bg-white dark:bg-gray-700/40"
+                  }`}
                 >
                   {h}
                 </button>
@@ -225,7 +199,6 @@ function PasoFechaHora({
         </div>
       )}
 
-      {/* Navegación */}
       <div className="flex gap-3 pt-1">
         <button
           onClick={onVolver}
@@ -245,7 +218,6 @@ function PasoFechaHora({
   );
 }
 
-// ── Paso 3: confirmación ──────────────────────────────────────────────────────
 function PasoConfirmar({
   cita,
   fechaNueva,
@@ -261,51 +233,43 @@ function PasoConfirmar({
         Confirma el cambio
       </p>
 
-      {/* Antes → Después */}
       <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-white/5">
-        {/* Antes */}
         <div className="bg-gray-50 dark:bg-gray-700/30 px-4 py-3">
           <p className="text-xs text-gray-400 mb-1.5 uppercase tracking-wider">
             Fecha actual
           </p>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 line-through">
-              <Calendar size={13} />
+              <Calendar size={13} />{" "}
               <span className="capitalize">{fmtFecha(cita.fecha)}</span>
             </div>
             <span className="text-gray-400">·</span>
             <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 line-through">
-              <Clock size={13} />
-              <span>{fmtHora(cita.hora)}</span>
+              <Clock size={13} /> <span>{fmtHora(cita.hora)}</span>
             </div>
           </div>
         </div>
-
-        {/* Separador con flecha */}
         <div className="flex items-center justify-center bg-amber-400 py-1.5">
           <ArrowRight size={14} className="text-gray-900" />
         </div>
-
-        {/* Después */}
         <div className="bg-amber-50 dark:bg-amber-900/15 px-4 py-3">
           <p className="text-xs text-amber-600 dark:text-amber-400 mb-1.5 uppercase tracking-wider font-semibold">
             Nueva fecha
           </p>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white">
-              <Calendar size={13} className="text-amber-500" />
+              <Calendar size={13} className="text-amber-500" />{" "}
               <span className="capitalize">{fmtFecha(fechaNueva)}</span>
             </div>
             <span className="text-gray-400">·</span>
             <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white">
-              <Clock size={13} className="text-amber-500" />
+              <Clock size={13} className="text-amber-500" />{" "}
               <span>{horaNueva}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Servicio y barbero (recordatorio) */}
       <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <Scissors size={13} className="text-amber-400 flex-shrink-0" />
         <span>{cita.servicio_nombre}</span>
@@ -313,15 +277,13 @@ function PasoConfirmar({
         <span>{cita.barbero_nombre}</span>
       </div>
 
-      {/* Error backend */}
       {error && (
         <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
-          <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+          <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />{" "}
           <span>{error}</span>
         </div>
       )}
 
-      {/* Botones */}
       <div className="flex gap-3">
         <button
           onClick={onVolver}
@@ -350,7 +312,6 @@ function PasoConfirmar({
   );
 }
 
-// ── Pantalla de éxito ─────────────────────────────────────────────────────────
 function PasoExito({ fechaNueva, horaNueva }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 gap-4 text-center">
@@ -369,29 +330,32 @@ function PasoExito({ fechaNueva, horaNueva }) {
   );
 }
 
-// ── Modal principal ───────────────────────────────────────────────────────────
 export default function ModalReagendar({ cita, onClose, onExito }) {
-  const [paso, setPaso] = useState(1); // 1 resumen | 2 fecha+hora | 3 confirmar | 4 éxito
+  const [paso, setPaso] = useState(1);
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
+  const { addToast } = useToast();
 
   const handleConfirmar = async () => {
     setEnviando(true);
     setError(null);
     try {
       const res = await reagendarCita(cita.id, { fecha, hora });
+      addToast("Cita reagendada exitosamente", "success");
       setPaso(4);
-      // Notificar al padre tras 1.5 s para que vea la animación de éxito
       setTimeout(() => onExito(res.cita || { ...cita, fecha, hora }), 1500);
     } catch (e) {
       setError(e.response?.data?.message || "No se pudo reagendar la cita");
+      addToast(
+        e.response?.data?.message || "No se pudo reagendar la cita",
+        "error",
+      );
       setEnviando(false);
     }
   };
 
-  // Bloquear cierre mientras envía
   const cerrar = () => {
     if (!enviando) onClose();
   };
@@ -405,43 +369,20 @@ export default function ModalReagendar({ cita, onClose, onExito }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4 pb-4 sm:pb-0">
-      <div
-        className="
-          relative bg-white dark:bg-gray-900
-          rounded-3xl w-full max-w-md shadow-2xl
-          border border-gray-100 dark:border-white/8
-          overflow-hidden
-          animate-in slide-in-from-bottom-4 duration-300
-        "
-      >
-        {/* Barra superior ámbar */}
+      <div className="relative bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 dark:border-white/8 overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
         <div className="h-1 w-full bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500" />
-
-        {/* Cabecera */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-white/8">
-          {/* Indicador de pasos */}
           <div className="flex items-center gap-2">
             {[1, 2, 3].map((n) => (
               <div
                 key={n}
-                className={`
-                  transition-all duration-300
-                  ${
-                    paso > n
-                      ? "w-5 h-2 rounded-full bg-amber-400"
-                      : paso === n
-                        ? "w-8 h-2 rounded-full bg-amber-400"
-                        : "w-2 h-2 rounded-full bg-gray-200 dark:bg-white/15"
-                  }
-                `}
+                className={`transition-all duration-300 ${paso > n ? "w-5 h-2 rounded-full bg-amber-400" : paso === n ? "w-8 h-2 rounded-full bg-amber-400" : "w-2 h-2 rounded-full bg-gray-200 dark:bg-white/15"}`}
               />
             ))}
           </div>
-
           <h3 className="text-sm font-bold text-gray-900 dark:text-white">
             {TITULOS[paso]}
           </h3>
-
           <button
             onClick={cerrar}
             disabled={enviando}
@@ -450,8 +391,6 @@ export default function ModalReagendar({ cita, onClose, onExito }) {
             <X size={15} />
           </button>
         </div>
-
-        {/* Contenido */}
         <div className="px-6 py-5">
           {paso === 1 && (
             <PasoResumen cita={cita} onContinuar={() => setPaso(2)} />

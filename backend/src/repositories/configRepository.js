@@ -1,24 +1,8 @@
-// src/repositories/configRepository.js
-/**
- * configRepository.js
- *
- * REFACTORIZACIÓN:
- * - Problema anterior: parsearValor duplicada en configModel.js y configRepository.js
- * - Problema anterior: configModel.js era un wrapper innecesario sobre este repositorio
- * - Solución: este archivo es la única fuente de verdad para acceso a configuración
- * - configModel.js queda como re-export de compatibilidad (ver archivo separado)
- *
- * Principio aplicado: DRY + SRP (Single Responsibility Principle)
- */
-
+// backend/src/repositories/configRepository.js
 import { getPool } from "../config/db.js";
 
-// ─── Utilidad privada ────────────────────────────────────────────────────────
-
 /**
- * Parsea el valor de configuración según su tipo declarado en BD.
- * Función privada — no exportar para evitar dependencias externas sobre
- * la representación interna de los datos.
+ * Parsea el valor de configuración según su tipo
  */
 const parsearValor = (valor, tipo) => {
   if (valor === null || valor === undefined) return null;
@@ -26,21 +10,15 @@ const parsearValor = (valor, tipo) => {
   switch (tipo) {
     case "numero":
       return Number(valor);
-
     case "booleano":
       return valor === "true" || valor === "1" || valor === true;
-
     case "json":
       try {
         return JSON.parse(valor);
       } catch {
-        console.warn(
-          `[configRepository] No se pudo parsear JSON para tipo "${tipo}":`,
-          valor,
-        );
+        console.warn(`[configRepository] No se pudo parsear JSON:`, valor);
         return valor;
       }
-
     case "texto":
     default:
       return valor;
@@ -48,19 +26,16 @@ const parsearValor = (valor, tipo) => {
 };
 
 /**
- * Serializa un valor para almacenarlo en BD.
- * Los objetos y arrays se convierten a JSON string.
+ * Serializa un valor para almacenarlo en BD
  */
 const serializarValor = (valor) => {
   if (valor === null || valor === undefined) return null;
   return typeof valor === "object" ? JSON.stringify(valor) : String(valor);
 };
 
-// ─── Repositorio ─────────────────────────────────────────────────────────────
-
 export const configRepository = {
   /**
-   * Retorna toda la configuración como mapa { clave: { valor, tipo, descripcion } }.
+   * Retorna toda la configuración
    */
   async getAll() {
     const pool = getPool();
@@ -79,8 +54,7 @@ export const configRepository = {
   },
 
   /**
-   * Retorna la configuración de una clave específica, con valor ya parseado.
-   * Retorna null si la clave no existe.
+   * Retorna la configuración de una clave específica
    */
   async getByKey(clave) {
     const pool = getPool();
@@ -98,13 +72,11 @@ export const configRepository = {
   },
 
   /**
-   * Actualiza el valor de una clave.
-   * Retorna null si la clave no existe en BD.
+   * Actualiza el valor de una clave
    */
   async set(clave, valor) {
     const pool = getPool();
 
-    // Verificar que la clave existe antes de actualizar
     const [existe] = await pool.execute(
       "SELECT tipo FROM configuracion WHERE clave = ?",
       [clave],
@@ -120,8 +92,7 @@ export const configRepository = {
   },
 
   /**
-   * Actualiza múltiples claves en paralelo.
-   * Retorna la configuración completa actualizada.
+   * Actualiza múltiples claves en paralelo
    */
   async setMany(pares) {
     const pool = getPool();

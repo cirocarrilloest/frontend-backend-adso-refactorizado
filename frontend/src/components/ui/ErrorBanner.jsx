@@ -1,20 +1,11 @@
-// frontend/src/components/ui/ErrorBanner.jsx
-/**
- * ErrorBanner.jsx — Componente compartido
- *
- * REFACTORIZACIÓN:
- * - Problema anterior: definido localmente en ~8 archivos como:
- *   function ErrorBanner({ msg }) { if (!msg) return null; ... }
- * - Inconsistencia: algunos usaban `msg`, otros `message`, otros `error`
- * - Solución: un componente con prop `message` + soporte opcional de retry
- *
- * USO:
- *   <ErrorBanner message="Error al cargar datos" />
- *   <ErrorBanner message={error} onRetry={cargarDatos} />
- */
-
+// src/components/ui/ErrorBanner.jsx
 import { AlertCircle, RefreshCw } from "lucide-react";
 
+/**
+ * Banner de error reutilizable
+ * @param {string} message - Mensaje de error
+ * @param {function} onRetry - Función opcional para reintentar
+ */
 export const ErrorBanner = ({ message, onRetry }) => {
   if (!message) return null;
 

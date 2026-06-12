@@ -1,14 +1,9 @@
-// src/repositories/servicioRepository.js
+// backend/src/repositories/servicioRepository.js
 import { getPool } from "../config/db.js";
-
-/**
- * Repositorio de servicios.
- * Todas las consultas SQL relacionadas con servicios están aquí.
- */
 
 export const servicioRepository = {
   /**
-   * Obtiene todos los servicios
+   * Obtener todos los servicios
    */
   async findAll(soloActivos = false) {
     const pool = getPool();
@@ -26,7 +21,7 @@ export const servicioRepository = {
   },
 
   /**
-   * Obtiene un servicio por ID
+   * Obtener un servicio por ID
    */
   async findById(id) {
     const pool = getPool();
@@ -37,7 +32,7 @@ export const servicioRepository = {
   },
 
   /**
-   * Crea un nuevo servicio
+   * Crear un nuevo servicio
    */
   async create(servicioData) {
     const pool = getPool();
@@ -59,7 +54,7 @@ export const servicioRepository = {
   },
 
   /**
-   * Actualiza un servicio
+   * Actualizar un servicio
    */
   async update(id, updates) {
     const pool = getPool();
@@ -87,7 +82,7 @@ export const servicioRepository = {
       values.push(updates.activo);
     }
 
-    if (fields.length === 0) return null;
+    if (fields.length === 0) return this.findById(id);
 
     values.push(id);
     await pool.execute(
@@ -99,7 +94,7 @@ export const servicioRepository = {
   },
 
   /**
-   * Elimina un servicio
+   * Eliminar un servicio
    */
   async delete(id) {
     const pool = getPool();
@@ -110,22 +105,7 @@ export const servicioRepository = {
   },
 
   /**
-   * Obtiene barberos que realizan un servicio específico
-   */
-  async getBarberosByServicioId(servicioId) {
-    const pool = getPool();
-    const [rows] = await pool.execute(
-      `SELECT DISTINCT u.id, u.nombre, u.email, u.telefono
-       FROM usuarios u
-       WHERE u.rol = 'barbero'
-       ORDER BY u.nombre`,
-      [servicioId],
-    );
-    return rows;
-  },
-
-  /**
-   * Verifica si un servicio está activo
+   * Verificar si un servicio está activo
    */
   async isActive(id) {
     const pool = getPool();
