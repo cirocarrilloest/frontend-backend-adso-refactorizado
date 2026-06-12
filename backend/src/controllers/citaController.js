@@ -120,14 +120,12 @@ export const getCitaById = async (req, res, next) => {
     if (!cita) {
       return notFound(res, "Cita no encontrada");
     }
-    // Validar permisos según rol
     if (req.usuario.rol === "cliente" && cita.cliente_id !== req.usuario.id) {
       return forbidden(res, "No tienes permiso para ver esta cita");
     }
     if (req.usuario.rol === "barbero" && cita.barbero_id !== req.usuario.id) {
       return forbidden(res, "No tienes permiso para ver esta cita");
     }
-    // Admin puede ver cualquier cita
     return ok(res, { cita });
   } catch (error) {
     next(error);
@@ -234,7 +232,6 @@ export const getCitasBarbero = async (req, res, next) => {
     const { barbero_id } = req.params;
     const { fecha_inicio, fecha_fin, estado } = req.query;
 
-    // Validar permisos
     if (
       req.usuario.rol === "barbero" &&
       parseInt(barbero_id) !== req.usuario.id
@@ -261,7 +258,6 @@ export const getCitasBarbero = async (req, res, next) => {
       );
     }
 
-    // Filtrar por estado si es necesario
     if (estado) {
       citas = citas.filter((c) => c.estado === estado);
     }
@@ -396,20 +392,167 @@ export const getAllCitas = async (req, res, next) => {
   }
 };
 
+// ============ DASHBOARD ADMIN (CORREGIDO) ============
+
+/**
+ * Obtener dashboard completo para admin
+ * Integra estadísticas, servicios top, clientes top y citas cercanas
+ */
 export const getDashboard = async (req, res, next) => {
   try {
+    // 1. Obtener estadísticas básicas del servicio
     const stats = await adminCitaService.getDashboardStats();
-    return ok(res, { dashboard: stats });
+
+    // 2. Obtener servicios top
+    const serviciosTop = await getServiciosTopInternal(req);
+
+    // 3. Obtener clientes top
+    const clientesTop = await getClientesTopInternal(req);
+
+    // 4. Obtener citas cercanas
+    const citasCercanas = await adminCitaService.getCitasCercanas(5);
+
+    return ok(res, {
+      dashboard: {
+        ...stats,
+        servicios_top: serviciosTop || [],
+        clientes_top: clientesTop || [],
+        citas_cercanas: citasCercanas || [],
+      },
+    });
   } catch (error) {
     next(error);
   }
 };
 
+// ============ FUNCIONES INTERNAS CORREGIDAS ============
+
+/**
+ * Función interna para obtener servicios top
+ * CORREGIDO: LIMIT con template string para evitar error de MySQL
+ */
+async function getServiciosTopInternal(req) {
+  try {
+    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
+
+    let limiteNum = parseInt(limite);
+    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
+    if (limiteNum > 100) limiteNum = 100;
+
+    const pool = getPool();
+    let query, params;
+
+    const tieneFechas =
+      fecha_inicio &&
+      fecha_fin &&
+      fecha_inicio !== "null" &&
+      fecha_inicio !== "undefined" &&
+      fecha_fin !== "null" &&
+      fecha_fin !== "undefined" &&
+      fecha_inicio !== "" &&
+      fecha_fin !== "";
+
+    if (tieneFechas) {
+      query = `
+        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas,
+               ROUND(SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(c.id), 0), 1) as tasa_exito
+        FROM servicios s
+        LEFT JOIN citas c ON s.id = c.servicio_id AND c.fecha BETWEEN ? AND ?
+        GROUP BY s.id, s.nombre, s.precio
+        ORDER BY total_citas DESC
+        LIMIT ${limiteNum}
+      `;
+      params = [fecha_inicio, fecha_fin];
+    } else {
+      query = `
+        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas,
+               ROUND(SUM(CASE WHEN c.estado = 'completada' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(c.id), 0), 1) as tasa_exito
+        FROM servicios s
+        LEFT JOIN citas c ON s.id = c.servicio_id
+        GROUP BY s.id, s.nombre, s.precio
+        ORDER BY total_citas DESC
+        LIMIT ${limiteNum}
+      `;
+      params = [];
+    }
+
+    const [rows] = await pool.execute(query, params);
+    return rows;
+  } catch (error) {
+    console.error("Error en getServiciosTopInternal:", error);
+    return [];
+  }
+}
+
+/**
+ * Función interna para obtener clientes top
+ * CORREGIDO: LIMIT con template string para evitar error de MySQL
+ */
+async function getClientesTopInternal(req) {
+  try {
+    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
+
+    let limiteNum = parseInt(limite);
+    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
+    if (limiteNum > 100) limiteNum = 100;
+
+    const pool = getPool();
+    let query, params;
+
+    const tieneFechas =
+      fecha_inicio &&
+      fecha_fin &&
+      fecha_inicio !== "null" &&
+      fecha_inicio !== "undefined" &&
+      fecha_fin !== "null" &&
+      fecha_fin !== "undefined" &&
+      fecha_inicio !== "" &&
+      fecha_fin !== "";
+
+    if (tieneFechas) {
+      query = `
+        SELECT u.id, u.nombre, u.email, 
+               COUNT(c.id) as total_citas, 
+               COALESCE(SUM(s.precio), 0) as total_gastado
+        FROM usuarios u
+        INNER JOIN citas c ON u.id = c.cliente_id AND c.fecha BETWEEN ? AND ?
+        INNER JOIN servicios s ON c.servicio_id = s.id
+        WHERE u.rol = 'cliente' AND c.estado = 'completada'
+        GROUP BY u.id, u.nombre, u.email
+        ORDER BY total_citas DESC
+        LIMIT ${limiteNum}
+      `;
+      params = [fecha_inicio, fecha_fin];
+    } else {
+      query = `
+        SELECT u.id, u.nombre, u.email, 
+               COUNT(c.id) as total_citas, 
+               COALESCE(SUM(s.precio), 0) as total_gastado
+        FROM usuarios u
+        INNER JOIN citas c ON u.id = c.cliente_id
+        INNER JOIN servicios s ON c.servicio_id = s.id
+        WHERE u.rol = 'cliente' AND c.estado = 'completada'
+        GROUP BY u.id, u.nombre, u.email
+        ORDER BY total_citas DESC
+        LIMIT ${limiteNum}
+      `;
+      params = [];
+    }
+
+    const [rows] = await pool.execute(query, params);
+    return rows;
+  } catch (error) {
+    console.error("Error en getClientesTopInternal:", error);
+    return [];
+  }
+}
+
+// ============ ENDPOINTS PÚBLICOS DE REPORTES ============
+
 export const getDistribucionHoraria = async (req, res, next) => {
   try {
     let { fecha_inicio, fecha_fin } = req.query;
 
-    // Si no hay fechas o son null, usar el último mes
     if (
       !fecha_inicio ||
       fecha_inicio === "null" ||
@@ -454,7 +597,6 @@ export const getReporteIngresos = async (req, res, next) => {
   try {
     let { periodo = "mes", fecha_inicio, fecha_fin } = req.query;
 
-    // Si no hay fechas o son null, usar el último mes
     if (
       !fecha_inicio ||
       fecha_inicio === "null" ||
@@ -488,53 +630,8 @@ export const getReporteIngresos = async (req, res, next) => {
 
 export const getServiciosTop = async (req, res, next) => {
   try {
-    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
-
-    console.log("getServiciosTop params:", { fecha_inicio, fecha_fin, limite });
-
-    // Validar limite
-    let limiteNum = parseInt(limite);
-    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
-    if (limiteNum > 100) limiteNum = 100;
-
-    const pool = getPool();
-    let query, params;
-
-    // Verificar si se enviaron fechas válidas
-    const tieneFechas =
-      fecha_inicio &&
-      fecha_fin &&
-      fecha_inicio !== "null" &&
-      fecha_inicio !== "undefined" &&
-      fecha_fin !== "null" &&
-      fecha_fin !== "undefined" &&
-      fecha_inicio !== "" &&
-      fecha_fin !== "";
-
-    if (tieneFechas) {
-      query = `
-        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas
-        FROM servicios s
-        LEFT JOIN citas c ON s.id = c.servicio_id AND c.estado = 'completada' AND c.fecha BETWEEN ? AND ?
-        GROUP BY s.id, s.nombre, s.precio
-        ORDER BY total_citas DESC
-        LIMIT ?
-      `;
-      params = [fecha_inicio, fecha_fin, limiteNum];
-    } else {
-      query = `
-        SELECT s.id, s.nombre, s.precio, COUNT(c.id) as total_citas
-        FROM servicios s
-        LEFT JOIN citas c ON s.id = c.servicio_id AND c.estado = 'completada'
-        GROUP BY s.id, s.nombre, s.precio
-        ORDER BY total_citas DESC
-        LIMIT ?
-      `;
-      params = [limiteNum];
-    }
-
-    const [rows] = await pool.execute(query, params);
-    return ok(res, { servicios: rows });
+    const resultados = await getServiciosTopInternal(req);
+    return ok(res, { servicios: resultados });
   } catch (error) {
     console.error("Error en getServiciosTop:", error);
     return ok(res, { servicios: [] });
@@ -543,61 +640,8 @@ export const getServiciosTop = async (req, res, next) => {
 
 export const getClientesTop = async (req, res, next) => {
   try {
-    let { fecha_inicio, fecha_fin, limite = 5 } = req.query;
-
-    console.log("getClientesTop params:", { fecha_inicio, fecha_fin, limite });
-
-    // Validar limite
-    let limiteNum = parseInt(limite);
-    if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
-    if (limiteNum > 100) limiteNum = 100;
-
-    const pool = getPool();
-    let query, params;
-
-    // Verificar si se enviaron fechas válidas
-    const tieneFechas =
-      fecha_inicio &&
-      fecha_fin &&
-      fecha_inicio !== "null" &&
-      fecha_inicio !== "undefined" &&
-      fecha_fin !== "null" &&
-      fecha_fin !== "undefined" &&
-      fecha_inicio !== "" &&
-      fecha_fin !== "";
-
-    if (tieneFechas) {
-      query = `
-        SELECT u.id, u.nombre, u.email, 
-               COUNT(c.id) as total_citas, 
-               COALESCE(SUM(s.precio), 0) as total_gastado
-        FROM usuarios u
-        INNER JOIN citas c ON u.id = c.cliente_id AND c.estado = 'completada' AND c.fecha BETWEEN ? AND ?
-        INNER JOIN servicios s ON c.servicio_id = s.id
-        WHERE u.rol = 'cliente'
-        GROUP BY u.id, u.nombre, u.email
-        ORDER BY total_citas DESC
-        LIMIT ?
-      `;
-      params = [fecha_inicio, fecha_fin, limiteNum];
-    } else {
-      query = `
-        SELECT u.id, u.nombre, u.email, 
-               COUNT(c.id) as total_citas, 
-               COALESCE(SUM(s.precio), 0) as total_gastado
-        FROM usuarios u
-        INNER JOIN citas c ON u.id = c.cliente_id AND c.estado = 'completada'
-        INNER JOIN servicios s ON c.servicio_id = s.id
-        WHERE u.rol = 'cliente'
-        GROUP BY u.id, u.nombre, u.email
-        ORDER BY total_citas DESC
-        LIMIT ?
-      `;
-      params = [limiteNum];
-    }
-
-    const [rows] = await pool.execute(query, params);
-    return ok(res, { clientes: rows });
+    const resultados = await getClientesTopInternal(req);
+    return ok(res, { clientes: resultados });
   } catch (error) {
     console.error("Error en getClientesTop:", error);
     return ok(res, { clientes: [] });
@@ -611,7 +655,6 @@ export const getTasaCancelacion = async (req, res, next) => {
     const pool = getPool();
     let query, params;
 
-    // Verificar si se enviaron fechas válidas
     const tieneFechas =
       fecha_inicio &&
       fecha_fin &&
@@ -666,7 +709,6 @@ export const getTasaCancelacionPorBarbero = async (req, res, next) => {
   try {
     let { fecha_inicio, fecha_fin } = req.query;
 
-    // Si no hay fechas o son null, usar el último mes
     if (
       !fecha_inicio ||
       fecha_inicio === "null" ||
@@ -688,8 +730,6 @@ export const getTasaCancelacionPorBarbero = async (req, res, next) => {
     }
 
     const pool = getPool();
-
-    // Consulta corregida
     const [rows] = await pool.execute(
       `SELECT 
         u.id, u.nombre,
@@ -712,7 +752,8 @@ export const getTasaCancelacionPorBarbero = async (req, res, next) => {
   }
 };
 
-// Exportar todos
+// ============ EXPORT DEFAULT ============
+
 export default {
   // Cliente
   agendarCita,

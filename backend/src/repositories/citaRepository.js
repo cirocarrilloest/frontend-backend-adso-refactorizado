@@ -4,13 +4,9 @@ import { getDiaSemana } from "../utils/dateUtils.js";
 
 /**
  * Repositorio de citas - Capa de acceso a datos
- * Responsabilidad: SOLO ejecutar queries SQL. NADA de lógica de negocio.
  */
 
 export const citaRepository = {
-  /**
-   * Crear una nueva cita
-   */
   async create(citaData) {
     const pool = getPool();
     const {
@@ -32,9 +28,6 @@ export const citaRepository = {
     return this.findById(result.insertId);
   },
 
-  /**
-   * Buscar cita por ID con joins para nombres
-   */
   async findById(id) {
     const pool = getPool();
     const [rows] = await pool.execute(
@@ -52,9 +45,6 @@ export const citaRepository = {
     return rows[0] || null;
   },
 
-  /**
-   * Buscar citas por cliente
-   */
   async findByClienteId(clienteId, options = {}) {
     const pool = getPool();
     let query = `
@@ -85,9 +75,6 @@ export const citaRepository = {
     return rows;
   },
 
-  /**
-   * Buscar citas por barbero y fecha
-   */
   async findByBarberoAndDate(barberoId, fecha, estado = null) {
     const pool = getPool();
     let query = `
@@ -110,9 +97,6 @@ export const citaRepository = {
     return rows;
   },
 
-  /**
-   * Buscar citas en un rango de fechas para un barbero
-   */
   async findByBarberoAndDateRange(barberoId, fechaInicio, fechaFin) {
     const pool = getPool();
     const [rows] = await pool.execute(
@@ -128,9 +112,6 @@ export const citaRepository = {
     return rows;
   },
 
-  /**
-   * Verificar si existe una cita duplicada (mismo barbero, fecha, hora)
-   */
   async existsDuplicate(barberoId, fecha, hora, excludeId = null) {
     const pool = getPool();
     let query = `
@@ -149,9 +130,6 @@ export const citaRepository = {
     return rows.length > 0;
   },
 
-  /**
-   * Obtener horarios ocupados de un barbero en una fecha
-   */
   async getHorariosOcupados(barberoId, fecha) {
     const pool = getPool();
     const [rows] = await pool.execute(
@@ -164,9 +142,6 @@ export const citaRepository = {
     return rows.map((r) => r.hora);
   },
 
-  /**
-   * Verificar si una hora está dentro del horario laboral del barbero
-   */
   async isWithinWorkingHours(barberoId, fecha, hora) {
     const pool = getPool();
     const diaSemana = getDiaSemana(fecha);
@@ -187,9 +162,6 @@ export const citaRepository = {
     return horaStr >= inicio && horaStr < fin;
   },
 
-  /**
-   * Actualizar una cita
-   */
   async update(id, updates) {
     const pool = getPool();
     const fields = [];
@@ -223,25 +195,16 @@ export const citaRepository = {
     return this.findById(id);
   },
 
-  /**
-   * Actualizar solo el estado de una cita
-   */
   async updateEstado(id, estado) {
     return this.update(id, { estado });
   },
 
-  /**
-   * Eliminar una cita (borrado físico - usar con precaución)
-   */
   async delete(id) {
     const pool = getPool();
     const [result] = await pool.execute("DELETE FROM citas WHERE id = ?", [id]);
     return result.affectedRows > 0;
   },
 
-  /**
-   * Obtener todas las citas con paginación y filtros
-   */
   async findAll(filters = {}, pagination = {}) {
     const pool = getPool();
     let query = `
@@ -290,9 +253,6 @@ export const citaRepository = {
     return rows;
   },
 
-  /**
-   * Obtener estadísticas del dashboard
-   */
   async getDashboardStats() {
     const pool = getPool();
 
@@ -321,18 +281,62 @@ export const citaRepository = {
       `SELECT COUNT(*) as total FROM usuarios WHERE rol = 'barbero'`,
     );
 
+    const [diasConCitas] = await pool.execute(
+      `SELECT COUNT(DISTINCT fecha) as dias_con_citas
+       FROM citas
+       WHERE MONTH(fecha) = MONTH(CURDATE())
+         AND YEAR(fecha) = YEAR(CURDATE())
+         AND estado IN ('pendiente', 'confirmada', 'completada')`,
+    );
+
+    const [totalCitasMes] = await pool.execute(
+      `SELECT COUNT(*) as total
+       FROM citas
+       WHERE MONTH(fecha) = MONTH(CURDATE())
+         AND YEAR(fecha) = YEAR(CURDATE())
+         AND estado IN ('pendiente', 'confirmada', 'completada')`,
+    );
+
+    const diasConCitasValor = diasConCitas[0]?.dias_con_citas || 1;
+    const totalCitasMesValor = totalCitasMes[0]?.total || 0;
+    const capacidadMaxima = diasConCitasValor * 16;
+    const tasaOcupacion =
+      capacidadMaxima > 0
+        ? Math.round((totalCitasMesValor / capacidadMaxima) * 100)
+        : 0;
+
     return {
-      citas_hoy: citasHoy[0].total,
-      citas_pendientes: citasPendientes[0].total,
-      ingresos_mes: ingresosMes[0].total,
-      clientes_totales: clientesTotales[0].total,
-      barberos_activos: barberosActivos[0].total,
+      citas_hoy: citasHoy[0]?.total || 0,
+      citas_pendientes: citasPendientes[0]?.total || 0,
+      ingresos_mes: ingresosMes[0]?.total || 0,
+      clientes_totales: clientesTotales[0]?.total || 0,
+      barberos_activos: barberosActivos[0]?.total || 0,
+      tasa_ocupacion: Math.min(100, tasaOcupacion),
     };
   },
 
-  /**
-   * Obtener reporte de ingresos agrupado
-   */
+  // ✅ CORREGIDO: LIMIT con interpolación directa
+  async getCitasCercanas(limite = 5) {
+    const pool = getPool();
+    const limiteNum = parseInt(limite);
+    const [rows] = await pool.execute(
+      `SELECT 
+        c.id, c.fecha, c.hora, c.estado,
+        u.nombre as cliente_nombre,
+        b.nombre as barbero_nombre,
+        s.nombre as servicio_nombre
+       FROM citas c
+       JOIN usuarios u ON c.cliente_id = u.id
+       JOIN usuarios b ON c.barbero_id = b.id
+       JOIN servicios s ON c.servicio_id = s.id
+       WHERE c.fecha >= CURDATE() 
+         AND c.estado IN ('pendiente', 'confirmada')
+       ORDER BY c.fecha ASC, c.hora ASC
+       LIMIT ${limiteNum}`,
+    );
+    return rows;
+  },
+
   async getIngresosReport(periodo, fechaInicio, fechaFin) {
     const pool = getPool();
 
@@ -377,12 +381,10 @@ export const citaRepository = {
 
     return rows;
   },
-  /**
-   * Obtener horario laboral de un barbero para un día específico
-   */
+
   async getHorarioByDay(barberoId, fecha) {
     const pool = getPool();
-    const diaSemana = getDiaSemana(fecha); // Necesitas esta función
+    const diaSemana = getDiaSemana(fecha);
 
     const [rows] = await pool.execute(
       `SELECT hora_inicio, hora_fin 

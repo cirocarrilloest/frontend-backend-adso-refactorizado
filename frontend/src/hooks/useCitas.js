@@ -31,11 +31,9 @@ export const useCitas = () => {
     showSuccess: "Cita completada",
   });
   const actualizarEstadoApi = useApi(citaService.actualizarEstadoCita);
-
-  // ✅ FUNCIÓN FALTANTE - Resumen de citas para barbero
   const getResumenCitasApi = useApi(citaService.getResumenCitas);
 
-  // Admin
+  // Admin - Dashboard
   const crearCitaAdminApi = useApi(citaService.crearCitaAdmin, {
     showSuccess: "Cita creada exitosamente",
   });
@@ -112,7 +110,6 @@ export const useCitas = () => {
       (id, estado) => actualizarEstadoApi.ejecutar(id, estado),
       [actualizarEstadoApi],
     ),
-    // ✅ NUEVA FUNCIÓN - Resumen de citas
     getResumenCitas: useCallback(
       () => getResumenCitasApi.ejecutar(),
       [getResumenCitasApi],

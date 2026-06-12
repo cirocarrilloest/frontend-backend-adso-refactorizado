@@ -1,8 +1,9 @@
 // src/services/adminCitaService.js
-import { citaRepository } from "../repositories/citaRepository.js";
+import citaRepository from "../repositories/citaRepository.js";
 import { userRepository } from "../repositories/userRepository.js";
 import { servicioRepository } from "../repositories/servicioRepository.js";
 import { notificacionService } from "./notificacionService.js";
+import { getPool } from "../config/db.js";
 import {
   AppError,
   NotFoundError,
@@ -28,7 +29,6 @@ export const adminCitaService = {
     hora,
     notas,
   }) {
-    // Validar cliente
     const cliente = await userRepository.findById(clienteId);
     if (!cliente || cliente.rol !== "cliente") {
       throw new ValidationError(
@@ -36,13 +36,11 @@ export const adminCitaService = {
       );
     }
 
-    // Validar barbero
     const barbero = await userRepository.findById(barberoId);
     if (!barbero || barbero.rol !== "barbero") {
       throw new ValidationError("Barbero no encontrado");
     }
 
-    // Validar servicio
     const servicio = await servicioRepository.findById(servicioId);
     if (!servicio || !servicio.activo) {
       throw new ValidationError("Servicio no encontrado o inactivo");
@@ -50,13 +48,11 @@ export const adminCitaService = {
 
     const fechaNorm = normalizarFecha(fecha);
 
-    // Validar fecha/hora
     const errorFecha = validarFechaHoraFutura(fechaNorm, hora);
     if (errorFecha) {
       throw new ValidationError(errorFecha.message);
     }
 
-    // Verificar disponibilidad
     const duplicado = await citaRepository.existsDuplicate(
       barberoId,
       fechaNorm,
@@ -66,7 +62,6 @@ export const adminCitaService = {
       throw new ConflictError("El horario seleccionado no está disponible");
     }
 
-    // Crear cita (confirmada directamente por admin)
     const citaCreada = await citaRepository.create({
       cliente_id: clienteId,
       barbero_id: barberoId,
@@ -77,7 +72,6 @@ export const adminCitaService = {
       estado: "confirmada",
     });
 
-    // Notificaciones
     await Promise.all([
       notificacionService.crear({
         usuarioId: clienteId,
@@ -109,7 +103,6 @@ export const adminCitaService = {
 
     const updates = {};
 
-    // Validar fecha si se está cambiando
     if (campos.fecha || campos.hora) {
       const nuevaFecha = campos.fecha || citaExistente.fecha;
       const nuevaHora = campos.hora || citaExistente.hora;
@@ -124,7 +117,6 @@ export const adminCitaService = {
       updates.hora = nuevaHora;
     }
 
-    // Verificar duplicado si cambia barbero/fecha/hora
     const barberoId = campos.barbero_id || citaExistente.barbero_id;
     const fecha = updates.fecha || citaExistente.fecha;
     const hora = updates.hora || citaExistente.hora;
@@ -145,7 +137,6 @@ export const adminCitaService = {
       }
     }
 
-    // Aplicar actualizaciones
     if (campos.barbero_id !== undefined) updates.barbero_id = campos.barbero_id;
     if (campos.servicio_id !== undefined)
       updates.servicio_id = campos.servicio_id;
@@ -154,7 +145,6 @@ export const adminCitaService = {
 
     const citaActualizada = await citaRepository.update(citaId, updates);
 
-    // Notificar cambios importantes
     if (updates.fecha || updates.hora) {
       await notificacionService.crear({
         usuarioId: citaExistente.cliente_id,
@@ -169,7 +159,6 @@ export const adminCitaService = {
       campos.barbero_id !== undefined &&
       campos.barbero_id !== citaExistente.barbero_id
     ) {
-      // Notificar al barbero anterior
       if (citaExistente.barbero_id) {
         await notificacionService.crear({
           usuarioId: citaExistente.barbero_id,
@@ -179,7 +168,6 @@ export const adminCitaService = {
           data: { citaId },
         });
       }
-      // Notificar al nuevo barbero
       const nuevoBarbero = await userRepository.findById(campos.barbero_id);
       if (nuevoBarbero) {
         await notificacionService.crear({
@@ -207,6 +195,13 @@ export const adminCitaService = {
    */
   async getDashboardStats() {
     return citaRepository.getDashboardStats();
+  },
+
+  /**
+   * Obtener citas cercanas
+   */
+  async getCitasCercanas(limite = 5) {
+    return citaRepository.getCitasCercanas(limite);
   },
 
   /**

@@ -5,7 +5,6 @@ let pool = null;
 
 // Crear conexión a la base de datos
 export const connectDB = async () => {
-  // Función para conectar a la base de datos MySQL utilizando mysql2/promise
   try {
     pool = mysql.createPool({
       host: process.env.DB_HOST,
@@ -18,7 +17,6 @@ export const connectDB = async () => {
       queueLimit: 0,
     });
 
-    // Probar conexión
     const connection = await pool.getConnection();
     console.log("MySQL conectado correctamente");
     connection.release();
@@ -28,12 +26,12 @@ export const connectDB = async () => {
     process.exit(1);
   }
 };
+
 // Obtener pool en otras partes
 export const getPool = () => {
-  // Función para obtener el pool de conexiones a la base de datos
   if (!pool) {
     throw new Error(
-      "base de datos no conectada. asegúrate de llamar a connectDB() primero.",
+      "Base de datos no conectada. Asegúrate de llamar a connectDB() primero.",
     );
   }
   return pool;
