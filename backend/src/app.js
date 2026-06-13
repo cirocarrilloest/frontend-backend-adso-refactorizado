@@ -28,7 +28,7 @@ clear();
 const startApp = async () => {
   try {
     await connectDB();
-    console.log(chalk.green("✓ Base de datos conectada"));
+    console.log(chalk.green("Base de datos conectada"));
 
     // Iniciar job de limpieza
     startExpiredAppointmentsJob();
@@ -73,18 +73,18 @@ const startApp = async () => {
     app.listen(PORT, () => {
       console.log(
         chalk.blue(`
-╔════════════════════════════════════════════╗
-║     🚀 Servidor iniciado correctamente     ║
-╠════════════════════════════════════════════╣
-║  Puerto: ${PORT}
-║  URL: http://localhost:${PORT}
-║  Entorno: ${process.env.NODE_ENV || "development"}
-╚════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════╗
+║           Servidor iniciado correctamente          ║
+╠════════════════════════════════════════════════════╣
+║  Puerto: ${PORT}                                      ║
+║  URL: http://localhost:${PORT}                        ║
+║  Entorno: ${process.env.NODE_ENV || "development"}                              ║
+╚════════════════════════════════════════════════════╝
       `),
       );
     });
   } catch (error) {
-    console.error(chalk.red("❌ Error al iniciar la app:"), error.message);
+    console.error(chalk.red("Error al iniciar la app:"), error.message);
     process.exit(1);
   }
 };
