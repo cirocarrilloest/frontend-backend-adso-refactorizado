@@ -27,6 +27,11 @@ export const useUsuarios = () => {
     showSuccess: "Contraseña actualizada",
   });
 
+  // Nueva función: Contadores de usuarios por rol
+  const getUserCountsApi = useApi(usuarioService.getUserCounts, {
+    showError: false,
+  });
+
   // Funciones específicas de barberos
   const listarBarberosApi = useApi(usuarioService.getBarberos);
   const perfilBarberoApi = useApi(usuarioService.getPerfilBarbero);
@@ -41,53 +46,44 @@ export const useUsuarios = () => {
   // ✅ Memoizar ejecutores con useCallback
   const listar = useCallback(
     (filtros) => listarApi.ejecutar(filtros),
-    [listarApi.ejecutar],
+    [listarApi],
   );
-  const obtener = useCallback(
-    (id) => obtenerApi.ejecutar(id),
-    [obtenerApi.ejecutar],
-  );
-  const crear = useCallback(
-    (data) => crearApi.ejecutar(data),
-    [crearApi.ejecutar],
-  );
+  const obtener = useCallback((id) => obtenerApi.ejecutar(id), [obtenerApi]);
+  const crear = useCallback((data) => crearApi.ejecutar(data), [crearApi]);
   const actualizar = useCallback(
     (id, data) => actualizarApi.ejecutar(id, data),
-    [actualizarApi.ejecutar],
+    [actualizarApi],
   );
-  const eliminar = useCallback(
-    (id) => eliminarApi.ejecutar(id),
-    [eliminarApi.ejecutar],
-  );
+  const eliminar = useCallback((id) => eliminarApi.ejecutar(id), [eliminarApi]);
   const cambiarRol = useCallback(
     (id, rol) => cambiarRolApi.ejecutar(id, rol),
-    [cambiarRolApi.ejecutar],
+    [cambiarRolApi],
   );
   const cambiarPassword = useCallback(
     (id, pass) => cambiarPasswordApi.ejecutar(id, pass),
-    [cambiarPasswordApi.ejecutar],
+    [cambiarPasswordApi],
   );
 
   // ✅ IMPORTANTE: listarBarberos debe ser estable entre renders
   const listarBarberos = useCallback(
     () => listarBarberosApi.ejecutar(),
-    [listarBarberosApi.ejecutar],
+    [listarBarberosApi],
   );
   const perfilBarbero = useCallback(
     (id) => perfilBarberoApi.ejecutar(id),
-    [perfilBarberoApi.ejecutar],
+    [perfilBarberoApi],
   );
   const horarioBarbero = useCallback(
     (id) => horarioBarberoApi.ejecutar(id),
-    [horarioBarberoApi.ejecutar],
+    [horarioBarberoApi],
   );
   const configurarHorario = useCallback(
     (id, data) => configurarHorarioApi.ejecutar(id, data),
-    [configurarHorarioApi.ejecutar],
+    [configurarHorarioApi],
   );
   const eliminarHorario = useCallback(
     (id, dia) => eliminarHorarioApi.ejecutar(id, dia),
-    [eliminarHorarioApi.ejecutar],
+    [eliminarHorarioApi],
   );
 
   // Estados combinados con useMemo para evitar recálculos innecesarios
@@ -98,7 +94,8 @@ export const useUsuarios = () => {
       crearApi.loading ||
       actualizarApi.loading ||
       eliminarApi.loading ||
-      listarBarberosApi.loading,
+      listarBarberosApi.loading ||
+      getUserCountsApi.loading,
     [
       listarApi.loading,
       obtenerApi.loading,
@@ -106,6 +103,7 @@ export const useUsuarios = () => {
       actualizarApi.loading,
       eliminarApi.loading,
       listarBarberosApi.loading,
+      getUserCountsApi.loading,
     ],
   );
 
@@ -116,7 +114,8 @@ export const useUsuarios = () => {
       crearApi.error ||
       actualizarApi.error ||
       eliminarApi.error ||
-      listarBarberosApi.error,
+      listarBarberosApi.error ||
+      getUserCountsApi.error,
     [
       listarApi.error,
       obtenerApi.error,
@@ -124,6 +123,7 @@ export const useUsuarios = () => {
       actualizarApi.error,
       eliminarApi.error,
       listarBarberosApi.error,
+      getUserCountsApi.error,
     ],
   );
 
@@ -139,6 +139,11 @@ export const useUsuarios = () => {
     eliminar,
     cambiarRol,
     cambiarPassword,
+    // Nueva función de conteos
+    getUserCounts: useCallback(
+      () => getUserCountsApi.ejecutar(),
+      [getUserCountsApi],
+    ),
     // Operaciones de barberos
     listarBarberos,
     perfilBarbero,

@@ -132,3 +132,12 @@ export const deleteHorarioBarbero = async (id, dia) => {
   const { data } = await api.delete(`/usuarios/barberos/${id}/horario/${dia}`);
   return data;
 };
+
+/**
+ * Obtener contadores de usuarios por rol (admin)
+ * GET /api/usuarios/counts
+ */
+export const getUserCounts = async () => {
+  const { data } = await api.get("/usuarios/counts");
+  return data;
+};

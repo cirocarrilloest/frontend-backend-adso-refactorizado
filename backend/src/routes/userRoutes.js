@@ -40,6 +40,9 @@ router.post(
 );
 
 // ============ RUTAS ADMIN ============
+// Ruta de conteos (DEBE IR ANTES de /:id para que no entre en conflicto)
+router.get("/counts", esAdmin, userController.getUserCounts);
+
 // GET - Listar usuarios
 router.get("/", esAdmin, userController.getUsuarios);
 router.get("/:id", esAdmin, userController.getUsuarioById);

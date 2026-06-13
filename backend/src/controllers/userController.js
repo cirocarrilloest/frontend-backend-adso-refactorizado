@@ -299,6 +299,36 @@ export const getBarberoPerfil = async (req, res, next) => {
   }
 };
 
+/**
+ * Obtener contadores de usuarios por rol
+ * GET /api/usuarios/counts
+ */
+export const getUserCounts = async (req, res, next) => {
+  try {
+    const pool = getPool();
+
+    const [counts] = await pool.execute(
+      `SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN rol = 'cliente' THEN 1 ELSE 0 END) as clientes,
+        SUM(CASE WHEN rol = 'barbero' THEN 1 ELSE 0 END) as barberos,
+        SUM(CASE WHEN rol = 'admin' THEN 1 ELSE 0 END) as admins
+       FROM usuarios`,
+    );
+
+    return ok(res, {
+      counts: {
+        total: counts[0]?.total || 0,
+        cliente: counts[0]?.clientes || 0,
+        barbero: counts[0]?.barberos || 0,
+        admin: counts[0]?.admins || 0,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getUsuarios,
   getUsuarioById,
@@ -314,4 +344,5 @@ export default {
   deleteHorarioBarbero,
   updateMiPerfil,
   deleteMiCuenta,
+  getUserCounts, // ← AGREGADA
 };
