@@ -9,14 +9,6 @@ import { fechaHoyStr } from "../../utils/dateUtils.js";
 
 /**
  * VALIDAR PERMISO DE BARBERO
- * @param {number} barberoId - ID del barbero de la cita/agenda
- * @param {number} usuarioId - ID del usuario autenticado
- * @param {string} usuarioRol - Rol del usuario
- * @param {string} accion - Acción que se intenta realizar (para el mensaje)
- * @throws {ForbiddenError} Si no tiene permiso
- *
- * Frontend: Verificar si el barbero puede ver/modificar la cita
- * Backend relacionado: Controladores de barbero
  */
 export const validarPermisoBarbero = (
   barberoId,
@@ -31,12 +23,6 @@ export const validarPermisoBarbero = (
 
 /**
  * VALIDAR Y OBTENER CITA EXISTENTE
- * @param {number} citaId - ID de la cita
- * @returns {Promise<Object>} Cita encontrada
- * @throws {NotFoundError} Si no existe
- *
- * Frontend: Detalle de cita, acciones sobre cita
- * Backend relacionado: citaRepository.findById
  */
 export const validarCitaExistente = async (citaId) => {
   const cita = await citaRepository.findById(citaId);
@@ -48,13 +34,6 @@ export const validarCitaExistente = async (citaId) => {
 
 /**
  * VALIDAR QUE LA CITA PERTENEZCA AL BARBERO
- * @param {Object} cita - Cita a validar
- * @param {number} barberoId - ID del barbero
- * @param {string} accion - Acción que se intenta realizar
- * @throws {ForbiddenError} Si no pertenece
- *
- * Frontend: Verificar propiedad de la cita
- * Backend relacionado: Reglas de negocio
  */
 export const validarPerteneceBarbero = (
   cita,
@@ -68,13 +47,6 @@ export const validarPerteneceBarbero = (
 
 /**
  * VALIDAR ESTADO DE CITA PARA UNA ACCIÓN
- * @param {Object} cita - Cita a validar
- * @param {Array} estadosPermitidos - Estados permitidos
- * @param {string} accion - Acción que se intenta realizar
- * @throws {BusinessRuleError} Si el estado no es permitido
- *
- * Frontend: Habilitar/deshabilitar botones según estado
- * Backend relacionado: Reglas de negocio
  */
 export const validarEstadoCita = (cita, estadosPermitidos, accion) => {
   if (!estadosPermitidos.includes(cita.estado)) {
@@ -86,11 +58,6 @@ export const validarEstadoCita = (cita, estadosPermitidos, accion) => {
 
 /**
  * CALCULAR FECHA FIN DE SEMANA
- * @param {string} fechaInicio - Fecha de inicio (YYYY-MM-DD)
- * @returns {string} Fecha fin (7 días después)
- *
- * Frontend: Vista semanal
- * Backend relacionado: Agenda semanal
  */
 export const calcularFechaFinSemana = (fechaInicio) => {
   const inicio = new Date(fechaInicio);
@@ -101,18 +68,46 @@ export const calcularFechaFinSemana = (fechaInicio) => {
 
 /**
  * AGRUPAR CITAS POR FECHA
- * @param {Array} citas - Lista de citas
- * @returns {Object} Objeto agrupado por fecha
- *
- * Frontend: Mostrar agenda agrupada
- * Backend relacionado: Agenda semanal
  */
 export const agruparCitasPorFecha = (citas) => {
   const agenda = {};
-  citas.forEach((cita) => {
-    const fecha = cita.fecha;
-    if (!agenda[fecha]) agenda[fecha] = [];
-    agenda[fecha].push(cita);
-  });
+
+  for (const cita of citas) {
+    // Obtener fecha en formato YYYY-MM-DD
+    let fechaKey;
+    if (cita.fecha instanceof Date) {
+      fechaKey = cita.fecha.toISOString().split("T")[0];
+    } else if (typeof cita.fecha === "string") {
+      fechaKey = cita.fecha.split("T")[0];
+    } else {
+      fechaKey = String(cita.fecha);
+    }
+
+    if (!agenda[fechaKey]) {
+      agenda[fechaKey] = [];
+    }
+
+    // Asegurar que la hora esté en formato HH:MM
+    const citaFormatted = {
+      ...cita,
+      hora: cita.hora
+        ? typeof cita.hora === "string"
+          ? cita.hora.slice(0, 5)
+          : String(cita.hora).slice(0, 5)
+        : "00:00",
+    };
+
+    agenda[fechaKey].push(citaFormatted);
+  }
+
+  // Ordenar citas dentro de cada día por hora
+  for (const fecha in agenda) {
+    agenda[fecha].sort((a, b) => {
+      const horaA = a.hora || "00:00";
+      const horaB = b.hora || "00:00";
+      return horaA.localeCompare(horaB);
+    });
+  }
+
   return agenda;
 };

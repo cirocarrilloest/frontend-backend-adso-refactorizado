@@ -63,7 +63,7 @@ export const getAgendaDia = async (
  *
  * Frontend: Panel barbero - Vista semanal
  * - Componente: AgendaSemanaView
- * - Endpoint: GET /api/citas/agenda/semana/:id?fecha_inicio=YYYY-MM-DD
+ * - Endpoint: GET /api/citas/barbero/:id/semana?fecha_inicio=YYYY-MM-DD
  *
  * Backend relacionado:
  * - citaRepository.findByBarberoAndDateRange
@@ -96,9 +96,12 @@ export const getAgendaSemana = async (
   // Agrupar por fecha
   const agenda = agruparCitasPorFecha(citas);
 
+  // ✅ CORREGIDO: Añadir total_citas y barbero_id
   return {
     agenda,
     fecha_inicio: fechaInicio,
     fecha_fin: fechaFin,
+    total_citas: citas.length, // ← AÑADIR ESTA LÍNEA
+    barbero_id: parseInt(barberoId), // ← OPCIONAL: útil para debugging
   };
 };
