@@ -40,33 +40,18 @@ router.post(
 );
 
 // ============ RUTAS ADMIN ============
-// Ruta de conteos (DEBE IR ANTES de /:id para que no entre en conflicto)
 router.get("/counts", esAdmin, userController.getUserCounts);
-
-// GET - Listar usuarios
 router.get("/", esAdmin, userController.getUsuarios);
 router.get("/:id", esAdmin, userController.getUsuarioById);
-
-// POST - Crear usuario
 router.post("/", esAdmin, userController.createUsuario);
-
-// PUT - Actualizar usuario
 router.put("/:id", esAdmin, userController.updateUsuario);
-
-// PATCH - Cambiar rol
 router.patch("/:id/rol", esAdmin, userController.asignarRol);
-
-// POST - Cambiar contraseña de un usuario (AGREGAR ESTA)
 router.post(
   "/:id/cambiar-password",
   esAdmin,
   userController.cambiarPasswordAdmin,
 );
-
-// DELETE - Eliminar usuario
 router.delete("/:id", esAdmin, userController.deleteUsuario);
-
-// Rutas de horarios de barbero (DELETE - eliminación)
 router.delete(
   "/barberos/:id/horarios/:dia",
   esAdmin,
