@@ -1,15 +1,23 @@
-// backend/src/services/tokenService.js
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+// Validación de seguridad para la variable de entorno
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1h";
+
+if (!JWT_SECRET) {
+  throw new Error("FATAL ERROR: JWT_SECRET no está definido en .env");
+}
+
 /**
  * Genera un token JWT firmado
  */
 export const generarToken = (id, email, rol) => {
-  return jwt.sign({ id, email, rol }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "1h",
+  // Nota: Evita enviar información sensible en el payload si no es necesaria
+  return jwt.sign({ id, email, rol }, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
   });
 };
 
@@ -18,40 +26,45 @@ export const generarToken = (id, email, rol) => {
  */
 export const verifyToken = (token) => {
   try {
-    if (tokenEstaInvalidado(token)) return null;
-    return jwt.verify(token, process.env.JWT_SECRET);
-  } catch {
+    if (!token || tokenEstaInvalidado(token)) return null;
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    // Es útil loguear el error internamente (opcional)
     return null;
   }
 };
 
-// Blacklist de tokens
-const tokenBlacklist = new Map();
+// Blacklist de tokens usando un Set en lugar de un Map para optimizar memoria
+// Guardamos solo el token como clave
+const tokenBlacklist = new Set();
 
-// Limpiar tokens expirados cada 10 minutos
-setInterval(
-  () => {
-    const ahora = Date.now();
-    for (const [token, exp] of tokenBlacklist.entries()) {
-      if (exp < ahora) tokenBlacklist.delete(token);
-    }
-  },
-  10 * 60 * 1000,
-);
-
+/**
+ * Invalida un token agregándolo a la blacklist
+ */
 export const invalidarToken = (token) => {
-  try {
-    const decoded = jwt.decode(token);
-    const exp = decoded?.exp ? decoded.exp * 1000 : Date.now() + 60 * 60 * 1000;
-    tokenBlacklist.set(token, exp);
-  } catch {
-    tokenBlacklist.set(token, Date.now() + 60 * 60 * 1000);
-  }
+  if (!token) return;
+  tokenBlacklist.add(token);
 };
 
 export const tokenEstaInvalidado = (token) => {
   return tokenBlacklist.has(token);
 };
+
+// Limpieza eficiente de la blacklist
+setInterval(
+  () => {
+    for (const token of tokenBlacklist) {
+      try {
+        // Verificamos si el token ha expirado realmente según JWT
+        jwt.verify(token, JWT_SECRET);
+      } catch (err) {
+        // Si verify falla, es porque expiró o es inválido, así que lo removemos
+        tokenBlacklist.delete(token);
+      }
+    }
+  },
+  60 * 60 * 1000,
+); // Limpieza cada 1 hora es suficiente y consume menos CPU
 
 export default {
   generarToken,

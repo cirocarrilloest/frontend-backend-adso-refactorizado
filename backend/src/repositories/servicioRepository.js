@@ -1,120 +1,25 @@
 // backend/src/repositories/servicioRepository.js
-import { getPool } from "../config/db.js";
+// Punto de entrada principal - Importa y re-exporta todos los módulos
 
+// IMPORTAR desde los módulos
+import {
+  findAll,
+  findById,
+  create,
+  update,
+  deleteServicio,
+} from "./servicioRepository/crudQueries.js";
+import { isActive } from "./servicioRepository/validacionesQueries.js";
+
+// RE-EXPORTAR
 export const servicioRepository = {
-  /**
-   * Obtener todos los servicios
-   */
-  async findAll(soloActivos = false) {
-    const pool = getPool();
-    let query = `SELECT * FROM servicios`;
-    const params = [];
-
-    if (soloActivos) {
-      query += ` WHERE activo = TRUE`;
-    }
-
-    query += ` ORDER BY nombre`;
-
-    const [rows] = await pool.execute(query, params);
-    return rows;
-  },
-
-  /**
-   * Obtener un servicio por ID
-   */
-  async findById(id) {
-    const pool = getPool();
-    const [rows] = await pool.execute(`SELECT * FROM servicios WHERE id = ?`, [
-      id,
-    ]);
-    return rows[0] || null;
-  },
-
-  /**
-   * Crear un nuevo servicio
-   */
-  async create(servicioData) {
-    const pool = getPool();
-    const {
-      nombre,
-      descripcion,
-      duracion,
-      precio,
-      activo = true,
-    } = servicioData;
-
-    const [result] = await pool.execute(
-      `INSERT INTO servicios (nombre, descripcion, duracion, precio, activo) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [nombre, descripcion || null, duracion, precio, activo],
-    );
-
-    return this.findById(result.insertId);
-  },
-
-  /**
-   * Actualizar un servicio
-   */
-  async update(id, updates) {
-    const pool = getPool();
-    const fields = [];
-    const values = [];
-
-    if (updates.nombre !== undefined) {
-      fields.push("nombre = ?");
-      values.push(updates.nombre);
-    }
-    if (updates.descripcion !== undefined) {
-      fields.push("descripcion = ?");
-      values.push(updates.descripcion || null);
-    }
-    if (updates.duracion !== undefined) {
-      fields.push("duracion = ?");
-      values.push(updates.duracion);
-    }
-    if (updates.precio !== undefined) {
-      fields.push("precio = ?");
-      values.push(updates.precio);
-    }
-    if (updates.activo !== undefined) {
-      fields.push("activo = ?");
-      values.push(updates.activo);
-    }
-
-    if (fields.length === 0) return this.findById(id);
-
-    values.push(id);
-    await pool.execute(
-      `UPDATE servicios SET ${fields.join(", ")} WHERE id = ?`,
-      values,
-    );
-
-    return this.findById(id);
-  },
-
-  /**
-   * Eliminar un servicio
-   */
-  async delete(id) {
-    const pool = getPool();
-    const [result] = await pool.execute(`DELETE FROM servicios WHERE id = ?`, [
-      id,
-    ]);
-    return result.affectedRows > 0;
-  },
-
-  /**
-   * Verificar si un servicio está activo
-   */
-  async isActive(id) {
-    const pool = getPool();
-    const [rows] = await pool.execute(
-      `SELECT activo FROM servicios WHERE id = ?`,
-      [id],
-    );
-    return rows[0]?.activo === true;
-  },
+  findAll,
+  findById,
+  create,
+  update,
+  delete: deleteServicio,
+  isActive,
 };
 
+// Export default para compatibilidad
 export default servicioRepository;

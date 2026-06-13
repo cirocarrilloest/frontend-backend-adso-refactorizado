@@ -84,7 +84,7 @@ export const validarCitaMiddleware = (req, res, next) => {
 };
 
 /**
- * Middleware para validar datos de servicio (✅ AGREGAR ESTE)
+ * Middleware para validar datos de servicio
  */
 export const validarServicioMiddleware = (req, res, next) => {
   const { nombre, duracion, precio, descripcion } = req.body;
