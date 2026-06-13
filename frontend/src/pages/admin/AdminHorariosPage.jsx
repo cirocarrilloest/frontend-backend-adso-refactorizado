@@ -337,42 +337,50 @@ export default function AdminHorariosPage() {
   const [horarioEditando, setHorarioEditando] = useState(null);
   const [horarioOrigenCopy, setHorarioOrigenCopy] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [inicializado, setInicializado] = useState(false);
 
-  const cargarBarberos = useCallback(async () => {
-    const result = await listarBarberos();
-    if (result) {
-      const lista = result.barberos || [];
-      setBarberos(lista);
-      if (lista.length > 0 && !barberoSeleccionado) {
-        setBarberoSeleccionado(lista[0]);
-      }
-    }
-  }, [listarBarberos, barberoSeleccionado]);
-
-  const cargarHorarios = useCallback(
-    async (barberoId) => {
-      if (!barberoId) return;
-      const result = await horarioBarbero(barberoId);
-      if (result) {
-        const horariosMap = {};
-        (result.horarios || []).forEach((h) => {
-          horariosMap[h.dia_semana] = h;
-        });
-        setHorarios(horariosMap);
-      }
-    },
-    [horarioBarbero],
-  );
-
+  // Cargar barberos solo una vez al montar
   useEffect(() => {
-    cargarBarberos();
-  }, [cargarBarberos]);
+    const cargarDatosIniciales = async () => {
+      try {
+        const result = await listarBarberos();
+        if (result) {
+          const lista = result.barberos || [];
+          setBarberos(lista);
+          if (lista.length > 0) {
+            setBarberoSeleccionado(lista[0]);
+          }
+          setInicializado(true);
+        }
+      } catch (err) {
+        console.error("Error al cargar barberos:", err);
+      }
+    };
 
+    cargarDatosIniciales();
+  }, []); // ← Solo se ejecuta al montar
+
+  // Cargar horarios cuando cambia el barbero seleccionado
   useEffect(() => {
-    if (barberoSeleccionado) {
-      cargarHorarios(barberoSeleccionado.id);
+    if (barberoSeleccionado && inicializado) {
+      const cargarHorariosBarbero = async () => {
+        try {
+          const result = await horarioBarbero(barberoSeleccionado.id);
+          if (result) {
+            const horariosMap = {};
+            (result.horarios || []).forEach((h) => {
+              horariosMap[h.dia_semana] = h;
+            });
+            setHorarios(horariosMap);
+          }
+        } catch (err) {
+          console.error("Error al cargar horarios:", err);
+        }
+      };
+
+      cargarHorariosBarbero();
     }
-  }, [barberoSeleccionado, cargarHorarios]);
+  }, [barberoSeleccionado?.id, inicializado]); // ← Dependencia estable
 
   const barberosFiltrados = barberos.filter((b) =>
     b.nombre?.toLowerCase().includes(searchTerm.toLowerCase()),
@@ -392,7 +400,16 @@ export default function AdminHorariosPage() {
         setModalOpen(false);
         setDiaEditando(null);
         setHorarioEditando(null);
-        await cargarHorarios(barberoSeleccionado.id);
+
+        // Recargar horarios
+        const updatedResult = await horarioBarbero(barberoSeleccionado.id);
+        if (updatedResult) {
+          const horariosMap = {};
+          (updatedResult.horarios || []).forEach((h) => {
+            horariosMap[h.dia_semana] = h;
+          });
+          setHorarios(horariosMap);
+        }
       }
     } catch (err) {
       addToast(
@@ -411,7 +428,16 @@ export default function AdminHorariosPage() {
       const result = await eliminarHorario(barberoSeleccionado.id, dia);
       if (result) {
         addToast(`Horario del ${dia} eliminado`, "success");
-        await cargarHorarios(barberoSeleccionado.id);
+
+        // Recargar horarios
+        const updatedResult = await horarioBarbero(barberoSeleccionado.id);
+        if (updatedResult) {
+          const horariosMap = {};
+          (updatedResult.horarios || []).forEach((h) => {
+            horariosMap[h.dia_semana] = h;
+          });
+          setHorarios(horariosMap);
+        }
       }
     } catch (err) {
       addToast(
@@ -452,7 +478,16 @@ export default function AdminHorariosPage() {
 
     setCopiarModalOpen(false);
     setHorarioOrigenCopy(null);
-    await cargarHorarios(barberoSeleccionado.id);
+
+    // Recargar horarios
+    const updatedResult = await horarioBarbero(barberoSeleccionado.id);
+    if (updatedResult) {
+      const horariosMap = {};
+      (updatedResult.horarios || []).forEach((h) => {
+        horariosMap[h.dia_semana] = h;
+      });
+      setHorarios(horariosMap);
+    }
     setCargando(false);
   };
 
@@ -471,8 +506,28 @@ export default function AdminHorariosPage() {
     setCopiarModalOpen(true);
   };
 
-  if (loading && barberos.length === 0) return <Spinner />;
-  if (error) return <ErrorBanner message={error} onRetry={cargarBarberos} />;
+  const handleRecargar = async () => {
+    if (barberoSeleccionado) {
+      try {
+        const result = await horarioBarbero(barberoSeleccionado.id);
+        if (result) {
+          const horariosMap = {};
+          (result.horarios || []).forEach((h) => {
+            horariosMap[h.dia_semana] = h;
+          });
+          setHorarios(horariosMap);
+        }
+      } catch (err) {
+        console.error("Error al recargar horarios:", err);
+      }
+    }
+  };
+
+  if (loading && !inicializado) return <Spinner />;
+  if (error && !inicializado)
+    return (
+      <ErrorBanner message={error} onRetry={() => window.location.reload()} />
+    );
 
   const estadisticas = {
     total: DIAS_SEMANA.length,
@@ -495,10 +550,7 @@ export default function AdminHorariosPage() {
           </p>
         </div>
         <button
-          onClick={() => {
-            cargarBarberos();
-            if (barberoSeleccionado) cargarHorarios(barberoSeleccionado.id);
-          }}
+          onClick={handleRecargar}
           className="p-2 rounded-lg text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
           title="Actualizar"
         >

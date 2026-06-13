@@ -1,5 +1,5 @@
 // src/hooks/useUsuarios.js
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useRef } from "react";
 import { useApi } from "./useApi";
 import * as usuarioService from "../services/usuarioService";
 
@@ -8,6 +8,12 @@ import * as usuarioService from "../services/usuarioService";
  * Usa useApi internamente para estandarizar loading/error
  */
 export const useUsuarios = () => {
+  // Estado local para horario
+  const [horario, setHorario] = useState(null);
+
+  // Ref para evitar recreaciones innecesarias
+  const mountedRef = useRef(true);
+
   // Operaciones CRUD básicas
   const listarApi = useApi(usuarioService.getUsuarios, { showError: false });
   const obtenerApi = useApi(usuarioService.getUsuarioById);
@@ -27,7 +33,7 @@ export const useUsuarios = () => {
     showSuccess: "Contraseña actualizada",
   });
 
-  // Nueva función: Contadores de usuarios por rol
+  // Contadores de usuarios por rol
   const getUserCountsApi = useApi(usuarioService.getUserCounts, {
     showError: false,
   });
@@ -43,95 +49,104 @@ export const useUsuarios = () => {
     showSuccess: "Horario eliminado",
   });
 
-  // ✅ Memoizar ejecutores con useCallback
-  const listar = useCallback(
-    (filtros) => listarApi.ejecutar(filtros),
-    [listarApi],
-  );
-  const obtener = useCallback((id) => obtenerApi.ejecutar(id), [obtenerApi]);
-  const crear = useCallback((data) => crearApi.ejecutar(data), [crearApi]);
+  // Funciones memoizadas con useCallback estable
+  const listarBarberos = useCallback(async () => {
+    try {
+      const data = await listarBarberosApi.ejecutar();
+      return data;
+    } catch (err) {
+      console.error("Error al listar barberos:", err);
+      throw err;
+    }
+  }, []); // ← Sin dependencia que cambie
+
+  const horarioBarbero = useCallback(async (id) => {
+    try {
+      const data = await horarioBarberoApi.ejecutar(id);
+      setHorario(data?.horarios || null);
+      return data;
+    } catch (err) {
+      console.error("Error al obtener el horario:", err);
+      setHorario(null);
+      throw err;
+    }
+  }, []); // ← Sin dependencia que cambie
+
+  const configurarHorario = useCallback(async (id, horarioData) => {
+    try {
+      const data = await configurarHorarioApi.ejecutar(id, horarioData);
+      return data;
+    } catch (err) {
+      console.error("Error al configurar horario:", err);
+      throw err;
+    }
+  }, []); // ← Sin dependencia que cambie
+
+  const eliminarHorario = useCallback(async (id, dia) => {
+    try {
+      const data = await eliminarHorarioApi.ejecutar(id, dia);
+      return data;
+    } catch (err) {
+      console.error("Error al eliminar horario:", err);
+      throw err;
+    }
+  }, []); // ← Sin dependencia que cambie
+
+  // Operaciones CRUD memoizadas
+  const listar = useCallback((filtros) => listarApi.ejecutar(filtros), []);
+  const obtener = useCallback((id) => obtenerApi.ejecutar(id), []);
+  const crear = useCallback((data) => crearApi.ejecutar(data), []);
   const actualizar = useCallback(
     (id, data) => actualizarApi.ejecutar(id, data),
-    [actualizarApi],
+    [],
   );
-  const eliminar = useCallback((id) => eliminarApi.ejecutar(id), [eliminarApi]);
+  const eliminar = useCallback((id) => eliminarApi.ejecutar(id), []);
   const cambiarRol = useCallback(
     (id, rol) => cambiarRolApi.ejecutar(id, rol),
-    [cambiarRolApi],
+    [],
   );
   const cambiarPassword = useCallback(
     (id, pass) => cambiarPasswordApi.ejecutar(id, pass),
-    [cambiarPasswordApi],
+    [],
   );
+  const perfilBarbero = useCallback((id) => perfilBarberoApi.ejecutar(id), []);
 
-  // ✅ IMPORTANTE: listarBarberos debe ser estable entre renders
-  const listarBarberos = useCallback(
-    () => listarBarberosApi.ejecutar(),
-    [listarBarberosApi],
-  );
-  const perfilBarbero = useCallback(
-    (id) => perfilBarberoApi.ejecutar(id),
-    [perfilBarberoApi],
-  );
-  const horarioBarbero = useCallback(
-    (id) => horarioBarberoApi.ejecutar(id),
-    [horarioBarberoApi],
-  );
-  const configurarHorario = useCallback(
-    (id, data) => configurarHorarioApi.ejecutar(id, data),
-    [configurarHorarioApi],
-  );
-  const eliminarHorario = useCallback(
-    (id, dia) => eliminarHorarioApi.ejecutar(id, dia),
-    [eliminarHorarioApi],
-  );
+  // Loading combinado (solo actualiza cuando cambian los valores, no las referencias)
+  const loading =
+    listarApi.loading ||
+    obtenerApi.loading ||
+    crearApi.loading ||
+    actualizarApi.loading ||
+    eliminarApi.loading ||
+    listarBarberosApi.loading ||
+    getUserCountsApi.loading ||
+    horarioBarberoApi.loading ||
+    configurarHorarioApi.loading ||
+    eliminarHorarioApi.loading;
 
-  // Estados combinados con useMemo para evitar recálculos innecesarios
-  const loading = useMemo(
-    () =>
-      listarApi.loading ||
-      obtenerApi.loading ||
-      crearApi.loading ||
-      actualizarApi.loading ||
-      eliminarApi.loading ||
-      listarBarberosApi.loading ||
-      getUserCountsApi.loading,
-    [
-      listarApi.loading,
-      obtenerApi.loading,
-      crearApi.loading,
-      actualizarApi.loading,
-      eliminarApi.loading,
-      listarBarberosApi.loading,
-      getUserCountsApi.loading,
-    ],
-  );
+  // Error combinado
+  const error =
+    listarApi.error ||
+    obtenerApi.error ||
+    crearApi.error ||
+    actualizarApi.error ||
+    eliminarApi.error ||
+    listarBarberosApi.error ||
+    getUserCountsApi.error ||
+    horarioBarberoApi.error ||
+    configurarHorarioApi.error ||
+    eliminarHorarioApi.error;
 
-  const error = useMemo(
-    () =>
-      listarApi.error ||
-      obtenerApi.error ||
-      crearApi.error ||
-      actualizarApi.error ||
-      eliminarApi.error ||
-      listarBarberosApi.error ||
-      getUserCountsApi.error,
-    [
-      listarApi.error,
-      obtenerApi.error,
-      crearApi.error,
-      actualizarApi.error,
-      eliminarApi.error,
-      listarBarberosApi.error,
-      getUserCountsApi.error,
-    ],
-  );
+  const getUserCounts = useCallback(() => getUserCountsApi.ejecutar(), []);
 
   return {
-    // Estados
     loading,
     error,
-    // Operaciones CRUD
+    horario,
+    listarBarberos,
+    horarioBarbero,
+    configurarHorario,
+    eliminarHorario,
     listar,
     obtener,
     crear,
@@ -139,17 +154,8 @@ export const useUsuarios = () => {
     eliminar,
     cambiarRol,
     cambiarPassword,
-    // Nueva función de conteos
-    getUserCounts: useCallback(
-      () => getUserCountsApi.ejecutar(),
-      [getUserCountsApi],
-    ),
-    // Operaciones de barberos
-    listarBarberos,
+    getUserCounts,
     perfilBarbero,
-    horarioBarbero,
-    configurarHorario,
-    eliminarHorario,
   };
 };
 
