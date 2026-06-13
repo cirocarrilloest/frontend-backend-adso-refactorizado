@@ -1,7 +1,4 @@
 // src/models/userModel.js
-// AHORA ES SOLO UN WRAPPER DEL REPOSITORY PARA MANTENER COMPATIBILIDAD
-// Eventualmente, los controllers deberían usar el repository directamente
-
 import userRepository from "../repositories/userRepository.js";
 import bcrypt from "bcryptjs";
 

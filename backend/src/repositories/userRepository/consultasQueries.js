@@ -15,7 +15,7 @@ import { getPool } from "../../config/db.js";
  * Backend relacionado: userController.getUsuarios
  */
 export const findAll = async ({ rol, search } = {}) => {
-  const pool = getPool();
+  const pool = await getPool();
   let query = `SELECT id, nombre, email, rol, telefono, created_at, updated_at 
                FROM usuarios WHERE 1=1`;
   const params = [];

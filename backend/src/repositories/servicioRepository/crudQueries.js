@@ -24,7 +24,7 @@ import {
  * ]
  */
 export const findAll = async (soloActivos = false) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   let query = `SELECT * FROM servicios`;
   const params = [];
 
@@ -63,7 +63,7 @@ export const findAll = async (soloActivos = false) => {
  * }
  */
 export const findById = async (id) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [rows] = await pool.execute(`SELECT * FROM servicios WHERE id = ?`, [
     id,
   ]);
@@ -88,7 +88,7 @@ export const findById = async (id) => {
  * Backend relacionado: servicioController.crearServicio
  */
 export const create = async (servicioData) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const { nombre, descripcion, duracion, precio, activo = true } = servicioData;
 
   const [result] = await pool.execute(
@@ -114,7 +114,7 @@ export const create = async (servicioData) => {
  * Backend relacionado: servicioController.actualizarServicio
  */
 export const update = async (id, updates) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
 
   // Preparar solo los campos válidos
   const actualizaciones = prepararActualizaciones(updates);
@@ -155,7 +155,7 @@ export const update = async (id, updates) => {
  * Nota: Puede fallar si el servicio tiene citas asociadas (foreign key)
  */
 export const deleteServicio = async (id) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [result] = await pool.execute(`DELETE FROM servicios WHERE id = ?`, [
     id,
   ]);

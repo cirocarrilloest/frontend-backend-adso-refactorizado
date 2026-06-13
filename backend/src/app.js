@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
 import { cargarConfiguracion } from "./middlewares/configMiddleware.js";
 import { startExpiredAppointmentsJob } from "./jobs/cleanExpiredAppointments.js";
+import { iniciarLimpiezaNotificaciones } from "./jobs/limpiarNotificaciones.js"; // ✅ NUEVO IMPORT
 import { errorHandler } from "./middlewares/errorHandler.js";
 
 // Rutas
@@ -28,10 +29,11 @@ clear();
 const startApp = async () => {
   try {
     await connectDB();
-    console.log(chalk.green("Base de datos conectada"));
+    console.log(chalk.green("✓ Base de datos conectada"));
 
-    // Iniciar job de limpieza
-    startExpiredAppointmentsJob();
+    // Iniciar jobs de mantenimiento
+    startExpiredAppointmentsJob(); // Limpieza de citas vencidas
+    iniciarLimpiezaNotificaciones(); // Limpieza de notificaciones antiguas
 
     // Middlewares básicos
     app.use(

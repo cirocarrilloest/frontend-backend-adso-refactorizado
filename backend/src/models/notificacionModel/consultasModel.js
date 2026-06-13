@@ -1,4 +1,4 @@
-// backend/src/services/notificacionService/consultasService.js
+// backend/src/models/notificacionModel/consultasModel.js
 import { getPool } from "../../config/db.js";
 import { parsearData, normalizarLimite } from "./helpers.js";
 
@@ -13,9 +13,9 @@ import { parsearData, normalizarLimite } from "./helpers.js";
  * - Campana de notificaciones (dropdown)
  * - Página de notificaciones
  * - Componentes: NotificacionesDropdown, NotificacionesList
- * - Endpoint: GET /api/notificaciones?soloNoLeidas=false&limite=20
+ * - Endpoint: GET /api/notificaciones
  *
- * Backend relacionado: notificacionController.getMisNotificaciones
+ * Backend relacionado: notificacionService.getByUsuario
  *
  * Ejemplo de respuesta:
  * [{
@@ -28,13 +28,15 @@ import { parsearData, normalizarLimite } from "./helpers.js";
  *   creada_en: "2024-01-01 10:00:00"
  * }]
  */
-export const getByUsuario = async (
+export const getNotificacionesByUsuario = async (
   usuarioId,
   soloNoLeidas = false,
   limite = 20,
 ) => {
-  const pool = await getPool(); // ✅ CORREGIDO: añadido await
-  const limiteNumero = normalizarLimite(limite, 20);
+  const pool = getPool();
+
+  // Normalizar límite para evitar inyección SQL
+  const limiteNumero = normalizarLimite(limite, 100, 20);
 
   let query = `
     SELECT id, tipo, titulo, mensaje, data, leida, creada_en
@@ -47,6 +49,7 @@ export const getByUsuario = async (
     query += ` AND leida = FALSE`;
   }
 
+  // Usar template string para LIMIT (evita problemas con prepared statements)
   query += ` ORDER BY creada_en DESC LIMIT ${limiteNumero}`;
 
   const [rows] = await pool.execute(query, params);
@@ -68,10 +71,10 @@ export const getByUsuario = async (
  * - Componente: NotificacionesBadge
  * - Endpoint: GET /api/notificaciones/contar-no-leidas
  *
- * Backend relacionado: notificacionController.contarNoLeidas
+ * Backend relacionado: notificacionService.contarNoLeidas
  */
 export const contarNoLeidas = async (usuarioId) => {
-  const pool = await getPool();
+  const pool = getPool();
   const [rows] = await pool.execute(
     `SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leida = FALSE`,
     [usuarioId],

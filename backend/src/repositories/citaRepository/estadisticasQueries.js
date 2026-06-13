@@ -9,7 +9,7 @@ import { getPool } from "../../config/db.js";
  * Backend relacionado: adminCitaService.getDashboardStats
  */
 export const getDashboardStats = async () => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
 
   const [citasHoy] = await pool.execute(
     `SELECT COUNT(*) as total FROM citas WHERE fecha = CURDATE() AND estado != 'cancelada'`,
@@ -81,7 +81,7 @@ export const getDashboardStats = async () => {
  * Backend relacionado: adminCitaService.getReporteIngresos
  */
 export const getIngresosReport = async (periodo, fechaInicio, fechaFin) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
 
   let groupBy;
   let selectPeriodo;

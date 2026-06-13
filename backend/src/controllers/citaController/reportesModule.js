@@ -47,7 +47,7 @@ export const getDistribucionHoraria = async (req, res, next) => {
       fecha_fin = hoy.toISOString().split("T")[0];
     }
 
-    const pool = getPool();
+    const pool = await getPool(); // ✅ CORREGIDO: añadido await
 
     if (barbero_id) {
       const [horarioBarbero] = await pool.execute(
@@ -241,7 +241,7 @@ export const getClientesTop = async (req, res, next) => {
 export const getTasaCancelacion = async (req, res, next) => {
   try {
     let { fecha_inicio, fecha_fin } = req.query;
-    const pool = getPool();
+    const pool = await getPool(); // ✅ CORREGIDO: añadido await
     let query, params;
 
     const tieneFechas =
@@ -318,7 +318,7 @@ export const getTasaCancelacionPorBarbero = async (req, res, next) => {
       fecha_fin = hoy.toISOString().split("T")[0];
     }
 
-    const pool = getPool();
+    const pool = await getPool(); // ✅ CORREGIDO: añadido await
     const [rows] = await pool.execute(
       `SELECT 
         u.id, u.nombre,
@@ -349,7 +349,7 @@ async function getServiciosTopInternal(req) {
     if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
     if (limiteNum > 100) limiteNum = 100;
 
-    const pool = getPool();
+    const pool = await getPool(); // ✅ CORREGIDO: añadido await
     let query, params;
 
     const tieneFechas =
@@ -401,7 +401,7 @@ async function getClientesTopInternal(req) {
     if (isNaN(limiteNum) || limiteNum < 1) limiteNum = 5;
     if (limiteNum > 100) limiteNum = 100;
 
-    const pool = getPool();
+    const pool = await getPool(); // ✅ CORREGIDO: añadido await
     let query, params;
 
     const tieneFechas =

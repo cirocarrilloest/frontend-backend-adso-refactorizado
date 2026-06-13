@@ -14,7 +14,7 @@ import { prepararActualizaciones, hashPassword } from "./helpers.js";
  * { id: 1, nombre: "Juan", email: "juan@test.com", pass: "hash", rol: "cliente", ... }
  */
 export const findByEmail = async (email) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [rows] = await pool.execute(
     `SELECT id, nombre, email, pass, rol, telefono, created_at, updated_at
      FROM usuarios WHERE email = ?`,
@@ -36,7 +36,7 @@ export const findByEmail = async (email) => {
  * Backend relacionado: userController.getUsuarioById
  */
 export const findById = async (id) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [rows] = await pool.execute(
     `SELECT id, nombre, email, pass, rol, telefono, created_at, updated_at
      FROM usuarios WHERE id = ?`,
@@ -54,7 +54,7 @@ export const findById = async (id) => {
  * Backend relacionado: authService.registrar, userController.createUsuario
  */
 export const emailExists = async (email) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [rows] = await pool.execute("SELECT id FROM usuarios WHERE email = ?", [
     email,
   ]);
@@ -79,7 +79,7 @@ export const emailExists = async (email) => {
  * Backend relacionado: authService.registrar, userController.createUsuario
  */
 export const create = async (userData) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const { nombre, email, pass, rol = "cliente", telefono = null } = userData;
   const hashedPassword = await hashPassword(pass);
 
@@ -105,7 +105,7 @@ export const create = async (userData) => {
  * Backend relacionado: userController.updateUsuario, userController.updateMiPerfil
  */
 export const update = async (id, updates) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
 
   // Preparar solo los campos válidos y encriptar contraseña si es necesario
   const actualizaciones = await prepararActualizaciones(updates);
@@ -144,7 +144,7 @@ export const update = async (id, updates) => {
  * Backend relacionado: userController.deleteUsuario, userController.deleteMiCuenta
  */
 export const deleteUser = async (id) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [result] = await pool.execute("DELETE FROM usuarios WHERE id = ?", [
     id,
   ]);

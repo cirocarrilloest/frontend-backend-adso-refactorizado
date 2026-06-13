@@ -11,7 +11,7 @@ import { getPool } from "../../config/db.js";
  * Backend relacionado: adminCitaService.getAllCitas
  */
 export const findAll = async (filters = {}, pagination = {}) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   let query = `
     SELECT c.*,
            u.nombre as cliente_nombre, u.email as cliente_email,
@@ -67,7 +67,7 @@ export const findAll = async (filters = {}, pagination = {}) => {
  * Backend relacionado: adminCitaService.getCitasCercanas
  */
 export const getCitasCercanas = async (limite = 5) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const limiteNum = parseInt(limite);
   const [rows] = await pool.execute(
     `SELECT 

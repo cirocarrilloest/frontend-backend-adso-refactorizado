@@ -24,7 +24,7 @@ export const getAll = async ({
   page = 1,
   limit = 20,
 } = {}) => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const offset = (page - 1) * limit;
   const limitNum = Math.max(1, Math.min(100, parseInt(limit) || 20));
 
@@ -90,7 +90,7 @@ export const getAll = async ({
  * Backend relacionado: contactoController.crearMensaje (para notificar a admins)
  */
 export const getAdminIds = async () => {
-  const pool = getPool();
+  const pool = await getPool(); // ✅ CORREGIDO: añadido await
   const [rows] = await pool.execute(
     "SELECT id FROM usuarios WHERE rol = 'admin'",
   );
