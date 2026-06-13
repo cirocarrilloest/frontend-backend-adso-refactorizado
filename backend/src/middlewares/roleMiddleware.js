@@ -3,7 +3,6 @@ import { ForbiddenError } from "../utils/errors.js";
 
 /**
  * Middleware para verificar roles
- * @param {string[]} rolesPermitidos - Array de roles permitidos
  */
 export const verificarRol = (rolesPermitidos) => {
   return (req, res, next) => {

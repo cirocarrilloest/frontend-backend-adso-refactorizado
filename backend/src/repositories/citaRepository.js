@@ -315,7 +315,7 @@ export const citaRepository = {
     };
   },
 
-  // ✅ CORREGIDO: LIMIT con interpolación directa
+  // CORREGIDO: LIMIT con interpolación directa
   async getCitasCercanas(limite = 5) {
     const pool = getPool();
     const limiteNum = parseInt(limite);
