@@ -10,14 +10,12 @@ import Servicios from "./pages/Servicios.jsx";
 import Contacto from "./pages/Contacto.jsx";
 import DashBoard from "./pages/DashBoard.jsx";
 
-// Admin pages
-import { AdminLayout } from "./pages/admin/AdminLayout";
-import { DashboardPage } from "./pages/admin/DashboardPage";
-import { UsuariosPage } from "./pages/admin/UsuariosPage";
-import { CitasPage } from "./pages/admin/CitasPage";
-import { ServiciosPage } from "./pages/admin/ServiciosPage";
-import { ConfiguracionPage } from "./pages/admin/ConfiguracionPage";
-import { ReportesPage } from "./pages/admin/ReportesPage";
+// Admin pages - IMPORTACIÓN DEFAULT (sin llaves)
+import AdminInicioPage from "./pages/admin/AdminInicioPage";
+import AdminUsuariosPage from "./pages/admin/AdminUsuariosPage";
+import AdminCitasPage from "./pages/admin/AdminCitasPage";
+import AdminServiciosPage from "./pages/admin/AdminServiciosPage";
+import AdminReportesPage from "./pages/admin/AdminReportesPage";
 
 function App() {
   return (
@@ -42,24 +40,20 @@ function App() {
             <Route path="/dashboard" element={<DashBoard />} />
           </Route>
 
-          {/* Nuevas rutas admin */}
+          {/* Rutas admin */}
           <Route
             element={
               <ProtectedRoute rolesPermitidos={["admin"]}>
-                <AdminLayout />
+                <DashboardLayout />
               </ProtectedRoute>
             }
           >
-            <Route path="/admin" element={<DashboardPage />} />
-            <Route path="/admin/dashboard" element={<DashboardPage />} />
-            <Route path="/admin/usuarios" element={<UsuariosPage />} />
-            <Route path="/admin/citas" element={<CitasPage />} />
-            <Route path="/admin/servicios" element={<ServiciosPage />} />
-            <Route
-              path="/admin/configuracion"
-              element={<ConfiguracionPage />}
-            />
-            <Route path="/admin/reportes" element={<ReportesPage />} />
+            <Route path="/admin" element={<AdminInicioPage />} />
+            <Route path="/admin/dashboard" element={<AdminInicioPage />} />
+            <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
+            <Route path="/admin/citas" element={<AdminCitasPage />} />
+            <Route path="/admin/servicios" element={<AdminServiciosPage />} />
+            <Route path="/admin/reportes" element={<AdminReportesPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
