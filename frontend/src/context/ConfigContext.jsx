@@ -33,19 +33,16 @@ export const ConfigProvider = ({ children }) => {
     cargarConfig();
   }, [cargarConfig]);
 
-  // Obtener valor de una clave
   const getValue = (key, defaultValue = null) => {
     return config[key]?.valor ?? defaultValue;
   };
 
-  // Obtener valor como booleano
   const getBoolean = (key, defaultValue = false) => {
     const val = config[key]?.valor;
     if (val === undefined) return defaultValue;
     return val === true || val === "true" || val === "1";
   };
 
-  // Obtener valor como número
   const getNumber = (key, defaultValue = 0) => {
     const val = config[key]?.valor;
     if (val === undefined || val === null) return defaultValue;
@@ -53,7 +50,6 @@ export const ConfigProvider = ({ children }) => {
     return isNaN(num) ? defaultValue : num;
   };
 
-  // Obtener array (para días laborales, etc.)
   const getArray = (key, defaultValue = []) => {
     const val = config[key]?.valor;
     if (!val) return defaultValue;
@@ -64,12 +60,10 @@ export const ConfigProvider = ({ children }) => {
     return defaultValue;
   };
 
-  // Obtener moneda configurada
   const getMoneda = () => {
     return getValue("moneda", "COP");
   };
 
-  // Formatear precio según moneda configurada
   const formatearPrecio = (precio) => {
     const moneda = getMoneda();
     const formato = getValue("formato_moneda", "es-CO");
@@ -82,12 +76,10 @@ export const ConfigProvider = ({ children }) => {
         maximumFractionDigits: getNumber("decimales_moneda", 0),
       }).format(precio);
     } catch (e) {
-      // Fallback si hay error
       return `${moneda} ${precio.toLocaleString()}`;
     }
   };
 
-  // Verificar si un día es laborable
   const esDiaLaborable = (fecha) => {
     const diasLaborales = getArray("dias_laborales", [
       "lunes",
@@ -114,19 +106,18 @@ export const ConfigProvider = ({ children }) => {
     return diasLaborales.includes(diaSemana);
   };
 
-  // Verificar si una hora está dentro del horario laboral
   const estaEnHorarioLaboral = (hora) => {
-    const apertura = getValue("horario_apertura", "09:00");
-    const cierre = getValue("horario_cierre", "20:00");
+    const apertura = getValue("horario_apertura", "06:00"); // ✅ Cambiado a 6:00 AM
+    const cierre = getValue("horario_cierre", "22:00"); // ✅ Cambiado a 10:00 PM
     const horaStr = String(hora).slice(0, 5);
 
     return horaStr >= apertura && horaStr < cierre;
   };
 
-  // Generar slots de horarios disponibles
+  // ✅ Generar slots desde las 6:00 AM hasta las 10:00 PM
   const generarSlotsHorarios = () => {
-    const apertura = getValue("horario_apertura", "09:00");
-    const cierre = getValue("horario_cierre", "20:00");
+    const apertura = getValue("horario_apertura", "06:00"); // ✅ Cambiado a 6:00 AM
+    const cierre = getValue("horario_cierre", "22:00"); // ✅ Cambiado a 10:00 PM
     const duracionSlot = getNumber("duracion_slot_minutos", 30);
 
     const slots = [];
@@ -148,7 +139,14 @@ export const ConfigProvider = ({ children }) => {
     return slots;
   };
 
-  // Verificar si una fecha/hora está disponible considerando días y horarios
+  // ✅ Nueva función: obtener rango de horario laboral
+  const getHorarioLaboral = () => {
+    return {
+      inicio: getValue("horario_apertura", "06:00"),
+      fin: getValue("horario_cierre", "22:00"),
+    };
+  };
+
   const verificarDisponibilidadGeneral = (fecha, hora) => {
     if (!esDiaLaborable(fecha)) return false;
     if (!estaEnHorarioLaboral(hora)) return false;
@@ -170,6 +168,7 @@ export const ConfigProvider = ({ children }) => {
         esDiaLaborable,
         estaEnHorarioLaboral,
         generarSlotsHorarios,
+        getHorarioLaboral, // ✅ Nueva función
         verificarDisponibilidadGeneral,
         recargar: cargarConfig,
       }}
